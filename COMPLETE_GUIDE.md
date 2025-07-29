@@ -88,7 +88,7 @@ If email is not provided, the installer will prompt for it.
 ### Manual Install
 ```bash
 # Clone repository
-git clone https://github.com/guardant-me/worker.git
+git clone https://github.com/m00npl/guardant-worker.git
 cd guardant-worker
 
 # Configure

@@ -33,7 +33,7 @@ curl -sSL https://guardant.me/install-worker.sh | bash
 ## Manual Installation
 
 ```bash
-git clone https://github.com/guardant-me/worker.git
+git clone https://github.com/m00npl/guardant-worker.git
 cd worker
 cp .env.example .env
 # Edit .env with your details
@@ -43,7 +43,7 @@ docker-compose up -d
 ## Support
 
 - Platform: https://guardant.me
-- Issues: https://github.com/guardant-me/worker/issues
+- Issues: https://github.com/m00npl/guardant-worker/issues
 - Email: support@guardant.me
 
 ---
