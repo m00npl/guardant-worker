@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  worker:
+    build: .
+    container_name: guardant-worker-${WORKER_ID:-1}
+    environment:
+      - NODE_ENV=production
+      - RABBITMQ_URL=${RABBITMQ_URL}
+      - WORKER_ID=${WORKER_ID:-worker-1}
+      - WORKER_REGION=${WORKER_REGION:-us-east-1}
+      - LOG_LEVEL=${LOG_LEVEL:-info}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # For auto-update
+      - ./:/app  # Mount source for git updates
+    restart: unless-stopped
+    networks:
+      - worker-network
+
+networks:
+  worker-network:
+    driver: bridge

@@ -1,0 +1,23 @@
+{
+  "name": "@guardant/worker-standalone",
+  "version": "1.0.0",
+  "description": "Standalone GuardAnt monitoring worker",
+  "main": "src/rabbitmq-worker.ts",
+  "scripts": {
+    "start": "bun run src/rabbitmq-worker.ts",
+    "dev": "bun --watch src/rabbitmq-worker.ts",
+    "docker:build": "docker build -t guardant-worker .",
+    "docker:run": "docker run --env-file .env guardant-worker"
+  },
+  "dependencies": {
+    "amqplib": "^0.10.3",
+    "axios": "^1.6.2",
+    "ping": "^0.4.4",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "@types/amqplib": "^0.10.4",
+    "@types/node": "^20.10.0",
+    "@types/ping": "^0.4.4"
+  }
+}
