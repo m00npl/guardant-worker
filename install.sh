@@ -12,6 +12,7 @@ REGISTRATION_URL=${REGISTRATION_URL:-https://guardant.me/api/public/workers/regi
 REGISTRATION_TOKEN=${REGISTRATION_TOKEN:-}
 OWNER_EMAIL=${OWNER_EMAIL:-}
 WORKER_COUNT=${WORKER_COUNT:-1}
+WORKER_NAME=${WORKER_NAME:-}
 
 echo "🚀 GuardAnt Worker Installer"
 echo "==========================="
@@ -208,7 +209,11 @@ if [ "$WORKER_COUNT" -gt 1 ]; then
         sudo $DOCKER_COMPOSE_CMD -f $COMPOSE_FILE down 2>/dev/null || true
         
         # Set environment for multi-worker
-        export HOSTNAME
+        if [ -n "$WORKER_NAME" ]; then
+            export HOSTNAME="$WORKER_NAME"
+        else
+            export HOSTNAME=$(hostname)
+        fi
         export TIMESTAMP=$(date +%s%3N)
         export OWNER_EMAIL
         export LOG_LEVEL=info
