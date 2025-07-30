@@ -6,6 +6,7 @@ import { locationDetector } from './worker-ant-location';
 import { getMetricsCollector } from './shared/metrics';
 import { UpdateManager } from './update-manager';
 import { PointsTracker } from './points-tracker';
+import { detectRegion } from './utils/region-detector';
 import * as fs from 'fs/promises';
 // Redis not needed for standalone worker
 
@@ -108,7 +109,20 @@ async function startWorker() {
 
     // Detect location
     const location = await locationDetector.detectLocation();
-    const region = location.region || config.region;
+    let region = location.region || config.region;
+    
+    // If still 'unknown' or 'auto', try IP-based detection
+    if (region === 'unknown' || region === 'auto') {
+      const detectedRegion = await detectRegion();
+      if (detectedRegion !== 'auto') {
+        region = detectedRegion;
+        logger.info('🌍 Region detected via IP geolocation', { region });
+      }
+    }
+    
+    // Update config with detected region
+    config.region = region;
+    
     logger.info('📍 Worker location detected', { region, city: location.city });
 
     // Initialize monitoring service
