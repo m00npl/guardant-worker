@@ -175,6 +175,30 @@ async function getWorkerKeypair(): Promise<{ publicKey: string; privateKey: stri
   }
 }
 
+async function checkWorkerStatus(): Promise<boolean> {
+  try {
+    const response = await fetch(`https://guardant.me/api/public/workers/register/${config.workerId}/status`);
+    
+    if (!response.ok) {
+      return false;
+    }
+    
+    const result = await response.json();
+    
+    if (result.approved && result.rabbitmqUrl) {
+      process.env.RABBITMQ_URL = result.rabbitmqUrl;
+      config.rabbitmqUrl = result.rabbitmqUrl;
+      logger.info('✅ Worker approved! Got RabbitMQ credentials');
+      return true;
+    }
+    
+    return false;
+  } catch (error) {
+    logger.error('Failed to check worker status', error);
+    return false;
+  }
+}
+
 async function registerWorker() {
   const ownerEmail = process.env.OWNER_EMAIL;
   if (!ownerEmail) {
@@ -183,6 +207,11 @@ async function registerWorker() {
   }
 
   try {
+    // First check if already registered and approved
+    if (await checkWorkerStatus()) {
+      return true;
+    }
+    
     logger.info('📝 Registering worker...', { workerId: config.workerId, ownerEmail });
     
     // Get or generate keypair
@@ -214,6 +243,14 @@ async function registerWorker() {
 
     const result = await response.json();
     logger.info('✅ Worker registered successfully', { approved: result.approved });
+    
+    // If already approved, update RabbitMQ URL
+    if (result.approved && result.rabbitmqUrl) {
+      process.env.RABBITMQ_URL = result.rabbitmqUrl;
+      config.rabbitmqUrl = result.rabbitmqUrl;
+      logger.info('📡 Got RabbitMQ credentials from registration');
+    }
+    
     return true;
   } catch (error) {
     logger.error('Failed to register worker', error);
@@ -233,7 +270,25 @@ async function startWorker() {
     }
     
     // Register worker if not already registered
-    await registerWorker();
+    const registered = await registerWorker();
+    
+    // If not approved yet, wait for approval
+    if (!config.rabbitmqUrl || config.rabbitmqUrl === 'amqp://localhost:5672') {
+      logger.info('⏳ Worker registered but waiting for approval...');
+      logger.info('📋 Please approve the worker in the admin panel');
+      
+      // Check status every 30 seconds
+      while (true) {
+        await new Promise(resolve => setTimeout(resolve, 30000));
+        
+        if (await checkWorkerStatus()) {
+          logger.info('🎉 Worker approved! Starting...');
+          break;
+        }
+        
+        logger.info('⏳ Still waiting for approval...');
+      }
+    }
     
     // Initialize points tracker
     pointsTracker = new PointsTracker(config.workerId);
