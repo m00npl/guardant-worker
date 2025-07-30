@@ -1,5 +1,4 @@
 import type { Service } from '/app/packages/shared-types/src/index';
-import { localCache } from '../local-cache';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface MonitoringResult {
@@ -22,8 +21,7 @@ export class MonitoringService {
     try {
       const result = await this.performCheck(service, startTime);
       
-      // Store result in local cache (will send to RabbitMQ or cache locally if connection failed)
-      await this.storeCheckResult(service, result, startTime);
+      // Standalone workers send results directly via RabbitMQ, not cached locally
       
       return result;
     } catch (error: any) {
@@ -33,8 +31,7 @@ export class MonitoringService {
         responseTime: Date.now() - startTime,
       };
 
-      // Store failed result too
-      await this.storeCheckResult(service, failedResult, startTime);
+      // Standalone workers send results directly via RabbitMQ, not cached locally
       
       return failedResult;
     }
@@ -63,24 +60,7 @@ export class MonitoringService {
     }
   }
 
-  private async storeCheckResult(service: Service, result: MonitoringResult, startTime: number): Promise<void> {
-    try {
-      await localCache.storeCheckResult({
-        id: uuidv4(),
-        serviceId: service.id,
-        nestId: service.nestId,
-        timestamp: startTime,
-        region: this.region,
-        status: result.status,
-        responseTime: result.responseTime || 0,
-        statusCode: result.details?.statusCode,
-        error: result.message,
-      });
-    } catch (error) {
-      console.error('❌ Failed to store check result:', error);
-      // Don't throw - monitoring should continue even if storage fails
-    }
-  }
+  // Removed storeCheckResult - standalone workers send results directly via RabbitMQ
 
   private async checkWeb(service: Service, startTime: number): Promise<MonitoringResult> {
     try {

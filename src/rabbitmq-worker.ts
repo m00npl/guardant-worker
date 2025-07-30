@@ -1,7 +1,7 @@
 import amqp from 'amqplib';
 import { createLogger } from './shared/logger';
 import { MonitoringService } from './services/monitoring';
-import { localCache } from './local-cache';
+// Local cache not needed for standalone workers - results sent directly via RabbitMQ
 import { locationDetector } from './worker-ant-location';
 import { getMetricsCollector } from './shared/metrics';
 import { UpdateManager } from './update-manager';
@@ -475,16 +475,7 @@ async function handleMonitorService(data: any) {
     try {
       const result = await monitoringService.checkService(service);
       
-      // Results sent to local cache and RabbitMQ
-
-      // Send result to local cache (which will forward to RabbitMQ)
-      await localCache.storeCheckResult({
-        id: `${serviceId}-${Date.now()}`,
-        serviceId,
-        nestId,
-        timestamp: Date.now(),
-        result,
-      });
+      // For standalone workers, results are sent via scheduler, not stored locally
 
       logger.info('✅ Check completed', { 
         serviceId, 
