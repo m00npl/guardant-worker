@@ -1,7 +1,9 @@
 #!/bin/bash
 
 # GuardAnt Worker Quick Install Script
-# Usage: curl -sSL https://guardant.example.com/install-worker.sh | bash
+# Usage: 
+#   Single worker: curl -sSL https://guardant.me/install | OWNER_EMAIL=your@email.com bash
+#   Multiple workers: curl -sSL https://guardant.me/install | OWNER_EMAIL=your@email.com WORKER_COUNT=3 bash
 
 set -e
 
@@ -9,9 +11,12 @@ INSTALL_DIR=${INSTALL_DIR:-/opt/guardant-worker}
 REGISTRATION_URL=${REGISTRATION_URL:-https://guardant.me/api/public/workers/register}
 REGISTRATION_TOKEN=${REGISTRATION_TOKEN:-}
 OWNER_EMAIL=${OWNER_EMAIL:-}
+WORKER_COUNT=${WORKER_COUNT:-1}
 
 echo "🚀 GuardAnt Worker Installer"
 echo "==========================="
+echo ""
+echo "Workers to install: $WORKER_COUNT"
 echo ""
 
 # Detect system and set appropriate install directory
@@ -95,6 +100,17 @@ fi
 
 echo ""
 
+# Get worker count if not provided
+if [ -z "$WORKER_COUNT" ]; then
+    WORKER_COUNT=1
+fi
+
+# Validate worker count
+if ! [[ "$WORKER_COUNT" =~ ^[0-9]+$ ]] || [ "$WORKER_COUNT" -lt 1 ] || [ "$WORKER_COUNT" -gt 10 ]; then
+    echo "❌ Invalid WORKER_COUNT. Must be between 1 and 10"
+    exit 1
+fi
+
 # Get owner email if not provided
 if [ -z "$OWNER_EMAIL" ]; then
     # Read from /dev/tty to work even when piped
@@ -168,6 +184,55 @@ sudo docker run --rm \
     bun run src/bootstrap.ts
 
 echo ""
+# If multiple workers requested, set up multi-worker configuration
+if [ "$WORKER_COUNT" -gt 1 ]; then
+    echo ""
+    echo "🔧 Setting up $WORKER_COUNT workers..."
+    
+    # Determine which compose file to use based on server
+    HOSTNAME=$(hostname)
+    if [ "$HOSTNAME" = "moon.dev" ] || [ "$HOSTNAME" = "moon" ]; then
+        # Use host network mode on same server as GuardAnt
+        COMPOSE_FILE="docker-compose.multi.yml"
+    else
+        # Use normal network mode on different servers
+        COMPOSE_FILE="docker-compose.blog.yml"
+    fi
+    
+    # Check if multi-worker compose file exists
+    if [ ! -f "$COMPOSE_FILE" ]; then
+        echo "⚠️  Multi-worker configuration not found. Using single worker."
+        WORKER_COUNT=1
+    else
+        # Stop any existing workers
+        sudo $DOCKER_COMPOSE_CMD -f $COMPOSE_FILE down 2>/dev/null || true
+        
+        # Set environment for multi-worker
+        export HOSTNAME
+        export TIMESTAMP=$(date +%s%3N)
+        export OWNER_EMAIL
+        export LOG_LEVEL=info
+        
+        # Start multiple workers
+        echo "🚀 Starting $WORKER_COUNT workers..."
+        sudo $DOCKER_COMPOSE_CMD -f $COMPOSE_FILE up -d --build
+        
+        echo ""
+        echo "✅ Installation complete!"
+        echo ""
+        echo "📊 Started $WORKER_COUNT workers"
+        echo "Next steps:"
+        echo "1. Admin will receive notification for: $OWNER_EMAIL"
+        echo "2. Approve each worker in GuardAnt dashboard"
+        echo "3. Workers will start automatically once approved"
+        echo "4. Check logs: cd $INSTALL_DIR && $DOCKER_COMPOSE_CMD -f $COMPOSE_FILE logs -f"
+        echo ""
+        echo "Worker location: $INSTALL_DIR"
+        exit 0
+    fi
+fi
+
+# Single worker installation
 echo "✅ Installation complete!"
 echo ""
 echo "Next steps:"
