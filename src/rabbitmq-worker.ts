@@ -8,6 +8,9 @@ import { UpdateManager } from './update-manager';
 import { PointsTracker } from './points-tracker';
 import { detectRegion } from './utils/region-detector';
 import * as fs from 'fs/promises';
+import * as os from 'os';
+import * as crypto from 'crypto';
+import * as path from 'path';
 // Redis not needed for standalone worker
 
 // Types
@@ -61,7 +64,23 @@ let checksCompleted = 0;
 // Points tracker
 let pointsTracker: PointsTracker;
 
+// Worker keys
+let workerKeys: { publicKey: string; privateKey: string } | null = null;
+
 // Standalone workers don't restore state - they receive tasks from scheduler
+
+// Sign data with worker's private key
+function signData(data: string): string {
+  if (!workerKeys) {
+    logger.warn('Worker keys not available for signing');
+    return '';
+  }
+  
+  const sign = crypto.createSign('SHA256');
+  sign.update(data);
+  sign.end();
+  return sign.sign(workerKeys.privateKey, 'base64');
+}
 
 // Send heartbeat to main server
 async function sendHeartbeat() {
@@ -83,11 +102,20 @@ async function sendHeartbeat() {
       timestamp: Date.now()
     };
     
+    // Sign the heartbeat
+    const heartbeatData = JSON.stringify(heartbeat);
+    const signature = signData(heartbeatData);
+    
+    const signedHeartbeat = {
+      ...heartbeat,
+      signature
+    };
+    
     await rabbitmqChannel.assertExchange('worker_heartbeat', 'fanout');
     await rabbitmqChannel.publish(
       'worker_heartbeat',
       '',
-      Buffer.from(JSON.stringify(heartbeat)),
+      Buffer.from(JSON.stringify(signedHeartbeat)),
       { expiration: '60000' } // Message expires in 1 minute
     );
     
@@ -100,9 +128,112 @@ async function sendHeartbeat() {
   }
 }
 
+// Generate or load worker keypair
+async function getWorkerKeypair(): Promise<{ publicKey: string; privateKey: string }> {
+  const keyDir = process.env.KEY_DIR || '.';
+  const publicKeyPath = path.join(keyDir, 'worker.pub');
+  const privateKeyPath = path.join(keyDir, 'worker.key');
+
+  try {
+    // Try to load existing keys
+    const publicKey = await fs.readFile(publicKeyPath, 'utf8');
+    const privateKey = await fs.readFile(privateKeyPath, 'utf8');
+    logger.info('🔑 Loaded existing worker keys');
+    return { publicKey, privateKey };
+  } catch (error) {
+    // Generate new keypair
+    logger.info('🔐 Generating new worker keypair...');
+    
+    return new Promise((resolve, reject) => {
+      crypto.generateKeyPair('rsa', {
+        modulusLength: 2048,
+        publicKeyEncoding: {
+          type: 'spki',
+          format: 'pem'
+        },
+        privateKeyEncoding: {
+          type: 'pkcs8',
+          format: 'pem'
+        }
+      }, async (err, publicKey, privateKey) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        try {
+          // Save keys to files
+          await fs.writeFile(publicKeyPath, publicKey, { mode: 0o644 });
+          await fs.writeFile(privateKeyPath, privateKey, { mode: 0o600 });
+          logger.info('✅ Worker keypair generated and saved');
+          resolve({ publicKey, privateKey });
+        } catch (saveError) {
+          reject(saveError);
+        }
+      });
+    });
+  }
+}
+
+async function registerWorker() {
+  const ownerEmail = process.env.OWNER_EMAIL;
+  if (!ownerEmail) {
+    logger.error('OWNER_EMAIL not set in environment');
+    return false;
+  }
+
+  try {
+    logger.info('📝 Registering worker...', { workerId: config.workerId, ownerEmail });
+    
+    // Get or generate keypair
+    workerKeys = await getWorkerKeypair();
+    const { publicKey } = workerKeys;
+    
+    const registrationData = {
+      workerId: config.workerId,
+      hostname: os.hostname(),
+      platform: os.platform(),
+      ip: 'auto', // Will be detected by server
+      publicKey: publicKey,
+      ownerEmail: ownerEmail
+    };
+
+    const response = await fetch('https://guardant.me/api/public/workers/register', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(registrationData)
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      logger.error('Registration failed', { status: response.status, error });
+      return false;
+    }
+
+    const result = await response.json();
+    logger.info('✅ Worker registered successfully', { approved: result.approved });
+    return true;
+  } catch (error) {
+    logger.error('Failed to register worker', error);
+    return false;
+  }
+}
+
 async function startWorker() {
   try {
     logger.info('🚀 RabbitMQ Worker starting...', { workerId: config.workerId });
+    
+    // Load or generate worker keys (needed for signing)
+    try {
+      workerKeys = await getWorkerKeypair();
+    } catch (error) {
+      logger.error('Failed to load worker keys', error);
+    }
+    
+    // Register worker if not already registered
+    await registerWorker();
     
     // Initialize points tracker
     pointsTracker = new PointsTracker(config.workerId);
