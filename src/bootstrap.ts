@@ -9,6 +9,98 @@ import crypto from 'crypto';
 
 const execAsync = promisify(exec);
 
+// Check if command exists
+async function commandExists(cmd: string): Promise<boolean> {
+  try {
+    await execAsync(`which ${cmd}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Check system requirements
+async function checkRequirements(): Promise<boolean> {
+  console.log('🔍 Checking system requirements...');
+  
+  const requirements = {
+    docker: { 
+      name: 'Docker', 
+      check: async () => await commandExists('docker'),
+      install: 'curl -fsSL https://get.docker.com | sh'
+    },
+    git: { 
+      name: 'Git', 
+      check: async () => await commandExists('git'),
+      install: 'apt-get update && apt-get install -y git'
+    },
+    curl: { 
+      name: 'curl', 
+      check: async () => await commandExists('curl'),
+      install: 'apt-get update && apt-get install -y curl'
+    }
+  };
+
+  let allPresent = true;
+  const missing: string[] = [];
+
+  for (const [cmd, info] of Object.entries(requirements)) {
+    const exists = await info.check();
+    if (exists) {
+      console.log(`✅ ${info.name} is installed`);
+    } else {
+      console.log(`❌ ${info.name} is NOT installed`);
+      missing.push(cmd);
+      allPresent = false;
+    }
+  }
+
+  if (!allPresent) {
+    console.log('\n❌ Missing required dependencies!');
+    console.log('\nTo install missing dependencies, run:\n');
+    
+    for (const cmd of missing) {
+      const info = requirements[cmd];
+      console.log(`# Install ${info.name}:`);
+      console.log(`sudo ${info.install}`);
+      console.log('');
+    }
+    
+    // Check if we have sudo access
+    try {
+      await execAsync('sudo -n true');
+      console.log('🔑 Sudo access available. Would you like to install missing dependencies automatically? (y/N)');
+      // Note: In bun context, we can't easily read stdin, so we'll exit here
+      console.log('\nPlease install the missing dependencies and run this script again.');
+      return false;
+    } catch {
+      console.log('\nPlease install the missing dependencies with sudo and run this script again.');
+      return false;
+    }
+  }
+
+  // Check Docker Compose
+  let dockerComposeCmd = '';
+  try {
+    await execAsync('docker compose version');
+    dockerComposeCmd = 'docker compose';
+    console.log('✅ Docker Compose (v2) is installed');
+  } catch {
+    try {
+      await execAsync('docker-compose --version');
+      dockerComposeCmd = 'docker-compose';
+      console.log('✅ Docker Compose (v1) is installed');
+    } catch {
+      console.log('❌ Docker Compose is NOT installed');
+      console.log('\nDocker Compose should come with Docker. Please ensure Docker is properly installed.');
+      return false;
+    }
+  }
+
+  console.log('\n✅ All requirements satisfied!\n');
+  return true;
+}
+
 interface WorkerRegistration {
   workerId: string;
   hostname: string;
@@ -228,11 +320,25 @@ LOG_LEVEL=info
 async function startWorker() {
   console.log('🚀 Starting worker...');
   
-  // Start using docker compose (v2 syntax)
+  // Determine which docker compose command to use
+  let dockerComposeCmd = 'docker compose';
   try {
-    await execAsync('docker compose up -d');
+    await execAsync('docker compose version');
+  } catch {
+    try {
+      await execAsync('docker-compose --version');
+      dockerComposeCmd = 'docker-compose';
+    } catch {
+      console.error('❌ Docker Compose not found!');
+      throw new Error('Docker Compose is required but not installed');
+    }
+  }
+  
+  // Start using the appropriate command
+  try {
+    await execAsync(`${dockerComposeCmd} up -d`);
     console.log('✅ Worker started successfully!');
-    console.log('📊 View logs: docker compose logs -f');
+    console.log(`📊 View logs: ${dockerComposeCmd} logs -f`);
   } catch (error) {
     console.error('❌ Failed to start worker:', error.message);
     throw error;
@@ -241,7 +347,17 @@ async function startWorker() {
 
 // Main bootstrap flow
 async function bootstrap() {
+  console.log('🚀 GuardAnt Worker Bootstrap');
+  console.log('============================\n');
+  
   try {
+    // Check system requirements first
+    const requirementsMet = await checkRequirements();
+    if (!requirementsMet) {
+      console.error('\n❌ System requirements not met. Please install missing dependencies.');
+      process.exit(1);
+    }
+    
     const config = await registerWorker();
     
     if (config && config.approved && config.rabbitmqUrl) {

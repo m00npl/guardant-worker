@@ -20,6 +20,50 @@ echo ""
 echo "Workers to install: $WORKER_COUNT"
 echo ""
 
+# Check for required tools
+echo "🔍 Checking system requirements..."
+MISSING_DEPS=""
+
+if ! command -v docker &> /dev/null; then
+    MISSING_DEPS="$MISSING_DEPS docker"
+fi
+
+if ! command -v git &> /dev/null; then
+    MISSING_DEPS="$MISSING_DEPS git"
+fi
+
+if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
+    MISSING_DEPS="$MISSING_DEPS curl"
+fi
+
+if [ ! -z "$MISSING_DEPS" ]; then
+    echo "❌ Missing required dependencies:$MISSING_DEPS"
+    echo ""
+    echo "Please install the missing dependencies:"
+    echo ""
+    if [[ $MISSING_DEPS == *"docker"* ]]; then
+        echo "# Install Docker:"
+        echo "curl -fsSL https://get.docker.com | sudo sh"
+        echo "sudo usermod -aG docker $USER"
+        echo ""
+    fi
+    if [[ $MISSING_DEPS == *"git"* ]]; then
+        echo "# Install Git:"
+        echo "sudo apt-get update && sudo apt-get install -y git"
+        echo ""
+    fi
+    if [[ $MISSING_DEPS == *"curl"* ]]; then
+        echo "# Install curl:"
+        echo "sudo apt-get update && sudo apt-get install -y curl"
+        echo ""
+    fi
+    echo "After installing, please run this script again."
+    exit 1
+fi
+
+echo "✅ All requirements satisfied!"
+echo ""
+
 # Detect system and set appropriate install directory
 detect_install_location() {
     # Check if running in Docker
