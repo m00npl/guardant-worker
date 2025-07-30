@@ -119,9 +119,11 @@ async function sendHeartbeat() {
       { expiration: '60000' } // Message expires in 1 minute
     );
     
-    logger.debug('💓 Heartbeat sent', { 
+    logger.info('💓 Heartbeat sent', { 
       version: heartbeat.version,
-      points: stats?.totalPoints 
+      points: stats?.totalPoints,
+      region: config.region,
+      workerId: config.workerId
     });
   } catch (error) {
     logger.error('Failed to send heartbeat', error);
