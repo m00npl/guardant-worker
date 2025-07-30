@@ -1,10 +1,18 @@
 FROM oven/bun:1
 
-# Install git and docker for auto-update capability
+# Install git and docker for auto-update capability + debug tools
 RUN apt-get update && apt-get install -y \
     git \
     docker.io \
     docker-compose \
+    curl \
+    wget \
+    dnsutils \
+    net-tools \
+    iputils-ping \
+    telnet \
+    netcat-openbsd \
+    traceroute \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
