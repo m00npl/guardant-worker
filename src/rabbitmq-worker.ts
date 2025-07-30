@@ -317,6 +317,10 @@ async function startWorker() {
     // Standalone workers receive all tasks from scheduler via RabbitMQ
 
     // Connect to RabbitMQ
+    logger.info('🔌 Connecting to RabbitMQ with URL:', { 
+      url: config.rabbitmqUrl.replace(/:[^:@]+@/, ':****@') // Hide password in logs
+    });
+    
     const connection = await amqp.connect(config.rabbitmqUrl);
     const channel = await connection.createChannel();
     rabbitmqChannel = channel; // Set global reference
