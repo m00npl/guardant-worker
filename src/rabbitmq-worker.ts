@@ -177,18 +177,27 @@ async function getWorkerKeypair(): Promise<{ publicKey: string; privateKey: stri
 
 async function checkWorkerStatus(): Promise<boolean> {
   try {
+    logger.info('🔍 Checking worker status...');
     const response = await fetch(`https://guardant.me/api/public/workers/register/${config.workerId}/status`);
     
     if (!response.ok) {
+      logger.warn('Status check failed', { status: response.status });
       return false;
     }
     
     const result = await response.json();
+    logger.info('📋 Status check result:', { 
+      approved: result.approved, 
+      hasRabbitMQ: !!result.rabbitmqUrl,
+      rabbitmqUrl: result.rabbitmqUrl ? result.rabbitmqUrl.replace(/:[^:@]+@/, ':****@') : 'none'
+    });
     
     if (result.approved && result.rabbitmqUrl) {
       process.env.RABBITMQ_URL = result.rabbitmqUrl;
       config.rabbitmqUrl = result.rabbitmqUrl;
-      logger.info('✅ Worker approved! Got RabbitMQ credentials');
+      logger.info('✅ Worker approved! Got RabbitMQ credentials', {
+        newUrl: result.rabbitmqUrl.replace(/:[^:@]+@/, ':****@')
+      });
       return true;
     }
     
