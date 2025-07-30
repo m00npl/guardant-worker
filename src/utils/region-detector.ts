@@ -1,4 +1,4 @@
-import { createLogger } from '../logger';
+import { createLogger } from '../shared/logger';
 import axios from 'axios';
 
 const logger = createLogger('region-detector');
