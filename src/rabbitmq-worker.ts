@@ -188,11 +188,7 @@ async function startWorker() {
         logger.error('Failed to process command', error);
         channel.nack(msg, false, false);
       }
-    };
-    
-    // Start consuming from both queues
-    await channel.consume(gq.queue, messageHandler);
-    await channel.consume(rq.queue, messageHandler);
+    });
     
     logger.info('🌍 Worker region', { region, queues: [globalQueue, regionQueue] });
 
