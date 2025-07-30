@@ -180,7 +180,17 @@ async function getWorkerKeypair(): Promise<{ publicKey: string; privateKey: stri
 async function checkWorkerStatus(): Promise<boolean> {
   try {
     logger.info('🔍 Checking worker status...');
-    const response = await fetch(`https://guardant.me/api/public/workers/register/${config.workerId}/status`);
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
+    const response = await fetch(`https://guardant.me/api/public/workers/register/${config.workerId}/status`, {
+      signal: controller.signal,
+      headers: {
+        'User-Agent': 'GuardAnt-Worker/1.0'
+      }
+    });
+    
+    clearTimeout(timeout);
     
     if (!response.ok) {
       logger.warn('Status check failed', { status: response.status });
@@ -204,8 +214,13 @@ async function checkWorkerStatus(): Promise<boolean> {
     }
     
     return false;
-  } catch (error) {
-    logger.error('Failed to check worker status', error);
+  } catch (error: any) {
+    logger.error('Failed to check worker status', {
+      message: error.message,
+      code: error.code,
+      cause: error.cause,
+      stack: error.stack
+    });
     return false;
   }
 }
@@ -238,13 +253,20 @@ async function registerWorker() {
       ownerEmail: ownerEmail
     };
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30000); // 30 second timeout
+    
     const response = await fetch('https://guardant.me/api/public/workers/register', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'User-Agent': 'GuardAnt-Worker/1.0'
       },
-      body: JSON.stringify(registrationData)
+      body: JSON.stringify(registrationData),
+      signal: controller.signal
     });
+    
+    clearTimeout(timeout);
 
     if (!response.ok) {
       const error = await response.text();
@@ -263,8 +285,13 @@ async function registerWorker() {
     }
     
     return true;
-  } catch (error) {
-    logger.error('Failed to register worker', error);
+  } catch (error: any) {
+    logger.error('Failed to register worker', {
+      message: error.message,
+      code: error.code,
+      cause: error.cause,
+      stack: error.stack
+    });
     return false;
   }
 }
