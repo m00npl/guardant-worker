@@ -351,11 +351,17 @@ async function bootstrap() {
   console.log('============================\n');
   
   try {
-    // Check system requirements first
-    const requirementsMet = await checkRequirements();
-    if (!requirementsMet) {
-      console.error('\n❌ System requirements not met. Please install missing dependencies.');
-      process.exit(1);
+    // Skip system requirements check if running inside Docker
+    // (requirements should be checked by install.sh before running bootstrap)
+    const isDocker = await fs.access('/.dockerenv').then(() => true).catch(() => false);
+    
+    if (!isDocker) {
+      // Only check requirements if NOT running in Docker
+      const requirementsMet = await checkRequirements();
+      if (!requirementsMet) {
+        console.error('\n❌ System requirements not met. Please install missing dependencies.');
+        process.exit(1);
+      }
     }
     
     const config = await registerWorker();
