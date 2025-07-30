@@ -5,13 +5,18 @@
 Install a GuardAnt worker with a single command:
 
 ```bash
+# Shortest URL:
+curl -sSL https://guardant.me/install | bash
+
+# Alternative URLs:
 curl -sSL https://guardant.me/install-worker.sh | bash
+curl -sSL https://guardant.me/worker.sh | bash
 ```
 
 Or with pre-configured email:
 
 ```bash
-curl -sSL https://guardant.me/install-worker.sh | OWNER_EMAIL=your@email.com bash
+curl -sSL https://guardant.me/install | OWNER_EMAIL=your@email.com bash
 ```
 
 ## What happens:

@@ -5,7 +5,7 @@ Lightweight monitoring worker for GuardAnt uptime monitoring platform.
 ## 🚀 Quick Install
 
 ```bash
-curl -sSL https://guardant.me/install-worker.sh | bash
+curl -sSL https://guardant.me/install | bash
 ```
 
 ## Features

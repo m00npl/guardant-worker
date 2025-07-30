@@ -76,7 +76,7 @@ export class UpdateManager {
       
       // Rebuild Docker image
       logger.info('🔨 Rebuilding Docker image...');
-      await execAsync('docker-compose build');
+      await execAsync('docker compose build');
       
       // Save version if provided
       if (version) {
@@ -86,8 +86,8 @@ export class UpdateManager {
       
       // Restart container
       logger.info('🔄 Restarting container...');
-      await execAsync('docker-compose down');
-      await execAsync('docker-compose up -d');
+      await execAsync('docker compose down');
+      await execAsync('docker compose up -d');
       
       logger.info('✅ Update completed successfully', { version });
       
@@ -129,12 +129,12 @@ export class UpdateManager {
     try {
       // Rebuild Docker image
       logger.info('🔨 Rebuilding Docker image...');
-      await execAsync('docker-compose build --no-cache');
+      await execAsync('docker compose build --no-cache');
       
       // Restart container
       logger.info('🔄 Restarting container...');
-      await execAsync('docker-compose down');
-      await execAsync('docker-compose up -d');
+      await execAsync('docker compose down');
+      await execAsync('docker compose up -d');
       
       logger.info('✅ Rebuild completed successfully');
       

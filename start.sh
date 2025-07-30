@@ -26,9 +26,9 @@ echo "Worker ID: ${WORKER_ID:-worker-1}"
 echo "Region: ${WORKER_REGION:-us-east-1}"
 echo "RabbitMQ: $RABBITMQ_URL"
 
-docker-compose up -d
+docker compose up -d
 
 # Show logs
 echo ""
 echo "✅ Worker started! Showing logs..."
-docker-compose logs -f
+docker compose logs -f

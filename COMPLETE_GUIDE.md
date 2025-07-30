@@ -17,13 +17,13 @@ curl -sSL https://guardant.me/install-worker.sh | bash
 ```
 
 The installer will:
-- Ask for owner's email address
-- Generate unique ID and keypair
+- Ask for the owner's email address
+- Generate a unique ID and keypair
 - Register with the platform
 - Wait for admin approval
 - Auto-configure once approved
 
-Alternatively, provide email via environment:
+Alternatively, provide email via the environment:
 ```bash
 OWNER_EMAIL=user@example.com curl -sSL https://guardant.me/install-worker.sh | bash
 ```
