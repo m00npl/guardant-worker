@@ -9,12 +9,11 @@ services:
       - WORKER_ID=worker-${HOSTNAME:-standalone}-1-${TIMESTAMP:-1753901234567}
       - OWNER_EMAIL=${OWNER_EMAIL:-moon.pl.kr@gmail.com}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - KEY_DIR=/keys
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./worker1-keys:/keys
       - ./worker1-cache:/cache
-    environment:
-      - KEY_DIR=/keys
     restart: unless-stopped
     networks:
       - worker-network
@@ -27,12 +26,11 @@ services:
       - WORKER_ID=worker-${HOSTNAME:-standalone}-2-${TIMESTAMP:-1753901234568}
       - OWNER_EMAIL=${OWNER_EMAIL:-moon.pl.kr@gmail.com}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - KEY_DIR=/keys
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./worker2-keys:/keys
       - ./worker2-cache:/cache
-    environment:
-      - KEY_DIR=/keys
     restart: unless-stopped
     networks:
       - worker-network
@@ -45,12 +43,11 @@ services:
       - WORKER_ID=worker-${HOSTNAME:-standalone}-3-${TIMESTAMP:-1753901234569}
       - OWNER_EMAIL=${OWNER_EMAIL:-moon.pl.kr@gmail.com}
       - LOG_LEVEL=${LOG_LEVEL:-info}
+      - KEY_DIR=/keys
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ./worker3-keys:/keys
       - ./worker3-cache:/cache
-    environment:
-      - KEY_DIR=/keys
     restart: unless-stopped
     networks:
       - worker-network
