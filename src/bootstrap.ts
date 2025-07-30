@@ -228,11 +228,11 @@ LOG_LEVEL=info
 async function startWorker() {
   console.log('🚀 Starting worker...');
   
-  // Start using docker-compose
+  // Start using docker compose (v2 syntax)
   try {
-    await execAsync('docker-compose up -d');
+    await execAsync('docker compose up -d');
     console.log('✅ Worker started successfully!');
-    console.log('📊 View logs: docker-compose logs -f');
+    console.log('📊 View logs: docker compose logs -f');
   } catch (error) {
     console.error('❌ Failed to start worker:', error.message);
     throw error;
