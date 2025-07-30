@@ -182,7 +182,7 @@ async function registerWorker(): Promise<WorkerConfig> {
   // Check if already configured
   try {
     await fs.access(BOOTSTRAP_CONFIG.configFile);
-    console.log('✅ Worker already configured. Starting...');
+    console.log('✅ Worker already configured.');
     return null; // Will use existing config
   } catch (error) {
     // Config doesn't exist, continue with registration
@@ -366,16 +366,28 @@ async function bootstrap() {
     
     const config = await registerWorker();
     
-    if (config && config.approved && config.rabbitmqUrl) {
+    if (config === null) {
+      // Already configured, just exit successfully
+      if (isDocker) {
+        console.log('✅ Configuration exists. Worker will be started by install script.');
+      } else {
+        await startWorker();
+      }
+    } else if (config && config.approved && config.rabbitmqUrl) {
       const ownerEmail = process.env.OWNER_EMAIL || await getOwnerEmail();
       await saveConfig(config, ownerEmail);
+      
+      // Don't try to start worker if running in Docker (install.sh will handle it)
+      if (!isDocker) {
+        await startWorker();
+      } else {
+        console.log('✅ Configuration saved. Worker will be started by install script.');
+      }
     } else if (config) {
       console.log('⏳ Worker registered but not approved yet');
       console.log('   Cannot start until admin approves');
       process.exit(0);
     }
-    
-    await startWorker();
   } catch (error) {
     console.error('❌ Bootstrap failed:', error.message);
     process.exit(1);
