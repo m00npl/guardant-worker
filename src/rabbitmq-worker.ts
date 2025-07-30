@@ -190,7 +190,7 @@ async function startWorker() {
       }
     });
     
-    logger.info('🌍 Worker region', { region, queues: [globalQueue, regionQueue] });
+    logger.info('🌍 Worker region', { region, queue: queueName });
 
     // Handle connection events
     connection.on('error', (error) => {
