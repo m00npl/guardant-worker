@@ -15,8 +15,7 @@ services:
       - ./worker1-keys:/keys
       - ./worker1-cache:/cache
     restart: unless-stopped
-    networks:
-      - worker-network
+    network_mode: host
 
   worker2:
     build: .
@@ -32,8 +31,7 @@ services:
       - ./worker2-keys:/keys
       - ./worker2-cache:/cache
     restart: unless-stopped
-    networks:
-      - worker-network
+    network_mode: host
 
   worker3:
     build: .
@@ -49,9 +47,9 @@ services:
       - ./worker3-keys:/keys
       - ./worker3-cache:/cache
     restart: unless-stopped
-    networks:
-      - worker-network
+    network_mode: host
 
-networks:
-  worker-network:
-    driver: bridge
+# Using host network mode instead
+# networks:
+#   worker-network:
+#     driver: bridge
