@@ -12,6 +12,7 @@ export declare class WorkerAntLocationDetector {
         continent: string;
         country: string;
         city: string;
+        region: string;
         datacenter: string;
         coordinates: {
             lat: number;
