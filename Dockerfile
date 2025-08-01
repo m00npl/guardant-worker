@@ -1,18 +1,8 @@
 FROM oven/bun:1
 
-# Install git and docker for auto-update capability + debug tools
+# Install only essential tools
 RUN apt-get update && apt-get install -y \
-    git \
-    docker.io \
-    docker-compose \
     curl \
-    wget \
-    dnsutils \
-    net-tools \
-    iputils-ping \
-    telnet \
-    netcat-openbsd \
-    traceroute \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -25,10 +15,7 @@ COPY bun.lockb* ./
 RUN bun install
 
 # Copy source code
-COPY . .
-
-# Initialize git repo (for updates)
-RUN git init && git config --global --add safe.directory /app
+COPY src ./src
 
 # Environment variables
 ENV NODE_ENV=production

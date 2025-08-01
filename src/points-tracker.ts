@@ -207,4 +207,23 @@ export class PointsTracker {
     }
     this.saveStats();
   }
+
+  // Update points configuration from server
+  async updateConfig(config: any) {
+    if (config.checkPoints) {
+      Object.assign(this.POINTS, config.checkPoints);
+    }
+    if (config.multipliers) {
+      Object.assign(this.MULTIPLIERS, config.multipliers);
+    }
+    
+    // Store config with stats for persistence
+    this.stats.config = config;
+    await this.saveStats();
+    
+    logger.info('Points configuration updated', {
+      checkPoints: this.POINTS,
+      multipliers: this.MULTIPLIERS
+    });
+  }
 }
