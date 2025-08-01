@@ -36,7 +36,7 @@ echo ""
 
 # Stop current worker
 echo "🛑 Stopping current worker..."
-docker compose down
+docker compose down --remove-orphans
 
 # Rebuild with new code
 echo "🔨 Building new worker image..."
@@ -49,8 +49,8 @@ docker compose up -d
 echo ""
 echo "✅ Update complete!"
 echo ""
-echo "📊 Check status with:"
+echo "Check status with:"
 echo "  docker compose ps"
 echo ""
-echo "📜 View logs with:"
+echo "View logs with:"
 echo "  docker compose logs -f"

@@ -11,7 +11,7 @@ if [ ! -f docker-compose.yml ]; then
     exit 1
 fi
 
-# Stop worker
-docker compose down
+# Stop worker and remove orphan containers
+docker compose down --remove-orphans
 
 echo "✅ Worker stopped"

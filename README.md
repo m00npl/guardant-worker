@@ -53,6 +53,9 @@ docker compose restart
 
 # Update worker to latest version
 ./update.sh
+
+# Clean old containers and images
+./clean.sh
 ```
 
 All scripts are located in the `scripts/` directory for better organization.
