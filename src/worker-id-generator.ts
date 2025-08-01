@@ -2,6 +2,7 @@ import * as os from 'os';
 import * as crypto from 'crypto';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { getWorkerInstance } from './worker-instance-tracker';
 
 /**
  * Generates a unique worker ID for scaled docker-compose instances
@@ -10,24 +11,30 @@ export async function generateUniqueWorkerId(): Promise<string> {
   const hostname = os.hostname();
   const baseId = process.env.WORKER_ID;
   
+  console.log('🔍 Worker ID generation debug:', {
+    hostname,
+    baseId,
+    HOSTNAME_env: process.env.HOSTNAME,
+    containerName: process.env.CONTAINER_NAME
+  });
+  
+  // First, try to detect container instance number from hostname
+  const containerMatch = hostname.match(/[-_](\d+)$/);
+  const instanceNum = containerMatch ? containerMatch[1] : null;
+  
   // If WORKER_ID is set and contains a pattern like {n}, replace it with instance number
   if (baseId && baseId.includes('{n}')) {
-    // Try to detect instance number from container hostname
-    const match = hostname.match(/[-_](\d+)$/);
-    const instanceNum = match ? match[1] : '1';
-    return baseId.replace('{n}', instanceNum);
+    // Get a unique instance number using our tracker
+    const trackedInstance = await getWorkerInstance(baseId);
+    console.log(`📋 Using pattern ${baseId} with tracked instance ${trackedInstance}`);
+    return baseId.replace('{n}', trackedInstance.toString());
   }
   
-  // If running in Docker, try to get container ID or instance number
-  if (process.env.HOSTNAME && process.env.HOSTNAME !== hostname) {
-    // In docker-compose scaled services, hostname includes instance number
-    const dockerHostname = process.env.HOSTNAME;
-    const match = dockerHostname.match(/[-_](\d+)$/);
-    if (match) {
-      const instanceNum = match[1];
-      const base = baseId || `${os.hostname()}-worker`;
-      return `${base}-${instanceNum}`;
-    }
+  // If we have an instance number from container, append it
+  if (instanceNum) {
+    const base = baseId || `${process.env.HOSTNAME || hostname}-worker`;
+    console.log(`📋 Using base ${base} with instance ${instanceNum}`);
+    return `${base}-${instanceNum}`;
   }
   
   // Check if we have a stored ID in the keys directory
