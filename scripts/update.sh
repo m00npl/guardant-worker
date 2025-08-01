@@ -21,13 +21,17 @@ echo ""
 # Detect current configuration
 echo "🔍 Detecting current configuration..."
 
-# Try to detect from current docker compose first
-RUNNING_WORKERS=$(docker compose ps --format json 2>/dev/null | jq -r 'select(.Service == "worker") | .Name' | wc -l | tr -d ' ')
+# First, count ALL guardant-worker containers (both formats)
+ALL_WORKERS=$(docker ps --format "{{.Names}}" | grep -E "^guardant-worker-" | wc -l | tr -d ' ')
 
-# If that fails, look for any guardant-worker containers
-if [ -z "$RUNNING_WORKERS" ] || [ "$RUNNING_WORKERS" -eq 0 ]; then
-    # Count containers from guardant-worker project
-    RUNNING_WORKERS=$(docker ps --filter "label=com.docker.compose.project=guardant-worker" --format "{{.Names}}" | wc -l | tr -d ' ')
+# Try to detect from current docker compose
+COMPOSE_WORKERS=$(docker compose ps --format json 2>/dev/null | jq -r 'select(.Service == "worker") | .Name' | wc -l | tr -d ' ')
+
+# Use the higher number (to catch all workers)
+if [ "$ALL_WORKERS" -gt "$COMPOSE_WORKERS" ]; then
+    RUNNING_WORKERS=$ALL_WORKERS
+else
+    RUNNING_WORKERS=$COMPOSE_WORKERS
 fi
 
 # Default to 1 if nothing found
@@ -36,6 +40,11 @@ if [ -z "$RUNNING_WORKERS" ] || [ "$RUNNING_WORKERS" -eq 0 ]; then
 fi
 
 echo "✅ Detected $RUNNING_WORKERS running worker(s)"
+
+# If we found old format workers, warn user
+if docker ps --format "{{.Names}}" | grep -q "guardant-worker-worker-"; then
+    echo "⚠️  Note: Found workers with old naming format, they will be replaced"
+fi
 
 echo ""
 
