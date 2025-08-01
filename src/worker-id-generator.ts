@@ -64,19 +64,6 @@ export async function generateUniqueWorkerId(): Promise<string> {
     return `${base}-${instanceNum}`;
   }
   
-  // Check if we have a stored ID in the keys directory
-  const keyDir = process.env.KEY_DIR || '/keys';
-  const idFile = path.join(keyDir, 'worker-id');
-  
-  try {
-    const storedId = await fs.readFile(idFile, 'utf-8');
-    if (storedId.trim()) {
-      return storedId.trim();
-    }
-  } catch (error) {
-    // File doesn't exist, will generate new ID
-  }
-  
   // Generate new unique ID
   const timestamp = Date.now();
   const random = crypto.randomBytes(4).toString('hex');
