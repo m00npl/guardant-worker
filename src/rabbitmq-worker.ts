@@ -182,6 +182,37 @@ async function getWorkerKeypair(): Promise<{ publicKey: string; privateKey: stri
   }
 }
 
+async function saveWorkerCredentials(rabbitmqUrl: string): Promise<void> {
+  try {
+    const keyDir = process.env.KEY_DIR || '/keys';
+    const credentialsFile = path.join(keyDir, 'rabbitmq-credentials');
+    
+    // Save credentials securely
+    await fs.mkdir(keyDir, { recursive: true });
+    await fs.writeFile(credentialsFile, rabbitmqUrl, { mode: 0o600 });
+    
+    logger.info('💾 Saved RabbitMQ credentials for worker');
+  } catch (error) {
+    logger.error('Failed to save credentials', error);
+  }
+}
+
+async function loadWorkerCredentials(): Promise<string | null> {
+  try {
+    const keyDir = process.env.KEY_DIR || '/keys';
+    const credentialsFile = path.join(keyDir, 'rabbitmq-credentials');
+    
+    const credentials = await fs.readFile(credentialsFile, 'utf-8');
+    if (credentials.trim()) {
+      logger.info('📂 Loaded saved RabbitMQ credentials');
+      return credentials.trim();
+    }
+  } catch (error) {
+    // File doesn't exist or can't be read - normal for new workers
+  }
+  return null;
+}
+
 async function checkWorkerStatus(): Promise<boolean> {
   try {
     logger.info('🔍 Checking worker status...');
@@ -215,6 +246,10 @@ async function checkWorkerStatus(): Promise<boolean> {
       logger.info('✅ Worker approved! Got RabbitMQ credentials', {
         newUrl: result.rabbitmqUrl.replace(/:[^:@]+@/, ':****@')
       });
+      
+      // Save RabbitMQ URL for this worker
+      await saveWorkerCredentials(result.rabbitmqUrl);
+      
       return true;
     }
     
@@ -287,6 +322,9 @@ async function registerWorker() {
       process.env.RABBITMQ_URL = result.rabbitmqUrl;
       config.rabbitmqUrl = result.rabbitmqUrl;
       logger.info('📡 Got RabbitMQ credentials from registration');
+      
+      // Save RabbitMQ URL for this worker
+      await saveWorkerCredentials(result.rabbitmqUrl);
     }
     
     return true;
@@ -313,6 +351,14 @@ async function startWorker() {
       workerKeys = await getWorkerKeypair();
     } catch (error) {
       logger.error('Failed to load worker keys', error);
+    }
+    
+    // Try to load saved credentials first
+    const savedCredentials = await loadWorkerCredentials();
+    if (savedCredentials) {
+      config.rabbitmqUrl = savedCredentials;
+      process.env.RABBITMQ_URL = savedCredentials;
+      logger.info('📂 Using saved RabbitMQ credentials');
     }
     
     // Register worker if not already registered
