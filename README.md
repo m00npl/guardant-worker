@@ -82,6 +82,25 @@ docker compose build
 docker compose ps
 ```
 
+## Multi-Worker Support
+
+You can run multiple workers on the same machine:
+
+```bash
+# Start 3 workers
+./scripts/start-multi.sh 3
+
+# Or use docker-compose directly
+docker compose up -d --scale worker=3
+```
+
+Each worker will:
+- Generate a unique ID automatically
+- Register separately with the admin panel
+- Receive its own RabbitMQ credentials
+
+See [Multi-Worker Setup](.docs/MULTI-WORKER.md) for detailed instructions.
+
 ## Configuration
 
 All configuration is done through environment variables in the `.env` file:
@@ -109,4 +128,5 @@ All configuration is done through environment variables in the `.env` file:
 
 - [Architecture Overview](.docs/ARCHITECTURE.md)
 - [Configuration Guide](.docs/CONFIGURATION.md)
+- [Multi-Worker Setup](.docs/MULTI-WORKER.md)
 - [Troubleshooting](.docs/TROUBLESHOOTING.md)

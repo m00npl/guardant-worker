@@ -11,6 +11,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as crypto from 'crypto';
 import * as path from 'path';
+import { generateUniqueWorkerId } from './worker-id-generator';
 // Redis not needed for standalone worker
 
 // Types
@@ -33,10 +34,10 @@ interface WorkerCommand {
   timestamp: number;
 }
 
-// Configuration
-const config = {
+// Configuration - will be initialized in startWorker
+let config = {
   rabbitmqUrl: process.env.RABBITMQ_URL || 'amqp://localhost:5672',
-  workerId: process.env.WORKER_ID || `worker-${Date.now()}`,
+  workerId: '', // Will be set during initialization
   region: process.env.WORKER_REGION || 'unknown',
 };
 
@@ -302,6 +303,9 @@ async function registerWorker() {
 
 async function startWorker() {
   try {
+    // Generate unique worker ID
+    config.workerId = await generateUniqueWorkerId();
+    
     logger.info('🚀 RabbitMQ Worker starting...', { workerId: config.workerId });
     
     // Load or generate worker keys (needed for signing)
