@@ -18,6 +18,18 @@ WORKER_DIR=$(pwd)
 echo "📍 Worker directory: $WORKER_DIR"
 echo ""
 
+# Detect current configuration
+echo "🔍 Detecting current configuration..."
+RUNNING_WORKERS=$(docker compose ps --format json 2>/dev/null | jq -r 'select(.Service == "worker") | .Name' | wc -l | tr -d ' ')
+
+if [ -z "$RUNNING_WORKERS" ] || [ "$RUNNING_WORKERS" -eq 0 ]; then
+    RUNNING_WORKERS=$(docker ps --filter "label=com.docker.compose.project=guardant-worker" --format "{{.Names}}" | grep -c "worker" || echo "1")
+fi
+
+echo "✅ Detected $RUNNING_WORKERS running worker(s)"
+
+echo ""
+
 # Pull latest changes
 echo "📥 Pulling latest changes from Git..."
 if ! git pull; then
@@ -34,17 +46,21 @@ fi
 echo "✅ Code updated"
 echo ""
 
-# Stop current worker
-echo "🛑 Stopping current worker..."
+# Stop current worker(s)
+echo "🛑 Stopping current worker(s)..."
 docker compose down --remove-orphans
 
 # Rebuild with new code
 echo "🔨 Building new worker image..."
 docker compose build --no-cache
 
-# Start updated worker
-echo "🚀 Starting updated worker..."
-docker compose up -d
+# Load environment
+source .env 2>/dev/null || true
+export HOSTNAME=${HOSTNAME:-$(hostname)}
+
+# Start updated worker(s) with same scale
+echo "🚀 Starting $RUNNING_WORKERS worker(s)..."
+docker compose up -d --scale worker=$RUNNING_WORKERS
 
 echo ""
 echo "✅ Update complete!"

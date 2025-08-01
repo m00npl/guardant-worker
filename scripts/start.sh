@@ -19,8 +19,32 @@ if [ -z "$OWNER_EMAIL" ]; then
     exit 1
 fi
 
-# Build and start
-docker compose build
-docker compose up -d
+# Ask for number of workers
+echo ""
+echo "How many workers would you like to start? (1-10) [default: 1]:"
+read -p "> " WORKER_COUNT
 
-echo "Worker started. Check logs with: docker compose logs -f"
+# Validate input
+if [ -z "$WORKER_COUNT" ]; then
+    WORKER_COUNT=1
+elif ! [[ "$WORKER_COUNT" =~ ^[1-9]$|^10$ ]]; then
+    echo "Invalid number. Using default: 1"
+    WORKER_COUNT=1
+fi
+
+# Export hostname for worker ID generation
+export HOSTNAME=${HOSTNAME:-$(hostname)}
+
+# Build and start
+echo ""
+echo "Building worker image..."
+docker compose build
+
+echo "Starting $WORKER_COUNT worker(s)..."
+docker compose up -d --scale worker=$WORKER_COUNT
+
+echo ""
+echo "✅ Started $WORKER_COUNT worker(s)"
+echo ""
+echo "Check status: docker compose ps"
+echo "View logs: docker compose logs -f"

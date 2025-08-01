@@ -1,14 +1,14 @@
 services:
   worker:
     build: .
-    container_name: guardant-worker
     environment:
       - NODE_ENV=production
-      - WORKER_ID=${WORKER_ID}
+      - WORKER_ID=${WORKER_ID:-}
       - OWNER_EMAIL=${OWNER_EMAIL}
       - RABBITMQ_URL=${RABBITMQ_URL}
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - KEY_DIR=/keys
+      - HOSTNAME=${HOSTNAME:-worker}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./.keys:/keys

@@ -55,5 +55,23 @@ Temporary cache for worker operations. Can be safely deleted.
 1. Copy `.env.example` to `.env`
 2. Set your `OWNER_EMAIL`
 3. Run `./start.sh`
-4. Wait for approval email
-5. Worker will start automatically after approval
+4. Choose number of workers (1-10)
+5. Wait for approval email
+6. Workers will start automatically after approval
+
+## Multi-Worker Setup
+
+The worker supports running multiple instances on the same machine:
+
+```bash
+# Start with specific number of workers
+./start.sh  # Will prompt for number
+
+# Change number of running workers
+./scale.sh  # Will prompt for new number
+
+# Update preserves the current scale
+./update.sh  # Automatically detects and maintains worker count
+```
+
+Each worker gets a unique ID based on hostname and container instance.

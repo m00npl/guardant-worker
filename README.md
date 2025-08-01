@@ -51,8 +51,11 @@ docker compose restart
 # Stop worker
 ./stop.sh
 
-# Update worker to latest version
+# Update worker to latest version (preserves scale)
 ./update.sh
+
+# Scale workers up or down
+./scale.sh
 
 # Clean old containers and images
 ./clean.sh
