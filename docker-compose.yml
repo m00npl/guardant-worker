@@ -1,3 +1,4 @@
+name: guardant-worker
 services:
   worker:
     build: .

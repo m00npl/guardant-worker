@@ -20,10 +20,19 @@ echo ""
 
 # Detect current configuration
 echo "🔍 Detecting current configuration..."
+
+# Try to detect from current docker compose first
 RUNNING_WORKERS=$(docker compose ps --format json 2>/dev/null | jq -r 'select(.Service == "worker") | .Name' | wc -l | tr -d ' ')
 
+# If that fails, look for any guardant-worker containers
 if [ -z "$RUNNING_WORKERS" ] || [ "$RUNNING_WORKERS" -eq 0 ]; then
-    RUNNING_WORKERS=$(docker ps --filter "label=com.docker.compose.project=guardant-worker" --format "{{.Names}}" | grep -c "worker" || echo "1")
+    # Count containers from guardant-worker project
+    RUNNING_WORKERS=$(docker ps --filter "label=com.docker.compose.project=guardant-worker" --format "{{.Names}}" | wc -l | tr -d ' ')
+fi
+
+# Default to 1 if nothing found
+if [ -z "$RUNNING_WORKERS" ] || [ "$RUNNING_WORKERS" -eq 0 ]; then
+    RUNNING_WORKERS=1
 fi
 
 echo "✅ Detected $RUNNING_WORKERS running worker(s)"
