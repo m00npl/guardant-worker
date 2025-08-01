@@ -72,9 +72,17 @@ docker compose down --remove-orphans
 echo "🔨 Building new worker image..."
 docker compose build --no-cache
 
-# Load environment
+# Load environment including saved configuration
 source .env 2>/dev/null || true
 export HOSTNAME=${HOSTNAME:-$(hostname)}
+export WORKER_ID=${WORKER_ID:-}
+export WORKER_COUNT=${WORKER_COUNT:-}
+
+# Use saved WORKER_COUNT if available, otherwise use detected count
+if [ -n "$WORKER_COUNT" ]; then
+    echo "📋 Using saved configuration: $WORKER_COUNT worker(s) with pattern: ${WORKER_ID:-default}"
+    RUNNING_WORKERS=$WORKER_COUNT
+fi
 
 # Start updated worker(s) with same scale
 echo "🚀 Starting $RUNNING_WORKERS worker(s)..."
