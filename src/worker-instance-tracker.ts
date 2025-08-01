@@ -1,8 +1,8 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 
-const INSTANCE_FILE = '/tmp/guardant-worker-instances.json';
-const LOCK_FILE = '/tmp/guardant-worker-instances.lock';
+const INSTANCE_FILE = '/cache/guardant-worker-instances.json';
+const LOCK_FILE = '/cache/guardant-worker-instances.lock';
 const MAX_WAIT = 5000; // 5 seconds max wait for lock
 
 interface InstanceData {
