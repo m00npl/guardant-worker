@@ -67,6 +67,9 @@ let pointsTracker: PointsTracker;
 // Worker keys
 let workerKeys: { publicKey: string; privateKey: string } | null = null;
 
+// Worker location
+let workerLocation: any = null;
+
 // Standalone workers don't restore state - they receive tasks from scheduler
 
 // Sign data with worker's private key
@@ -99,6 +102,7 @@ async function sendHeartbeat() {
       totalPoints: stats?.totalPoints || 0,
       currentPeriodPoints: stats?.currentPeriod.points || 0,
       earnings,
+      location: workerLocation,
       timestamp: Date.now()
     };
     
@@ -347,6 +351,9 @@ async function startWorker() {
     // Update config with detected region
     config.region = region;
     
+    // Store location for heartbeats
+    workerLocation = location;
+    
     logger.info('📍 Worker location detected', { region, city: location.city });
 
     // Initialize monitoring service
@@ -382,6 +389,59 @@ async function startWorker() {
     await channel.bindQueue(q.queue, 'worker_commands', 'check_service_once');
     await channel.bindQueue(q.queue, 'worker_commands', 'update_worker');
     await channel.bindQueue(q.queue, 'worker_commands', 'rebuild_worker');
+
+    // Also create and bind worker-specific queue for targeted commands
+    const workerQueue = `worker.${config.workerId}`;
+    const wq = await channel.assertQueue(workerQueue, { durable: true });
+    
+    // Listen on worker-specific queue
+    await channel.consume(wq.queue, async (msg) => {
+      if (!msg) return;
+
+      try {
+        const command: WorkerCommand = JSON.parse(msg.content.toString());
+        logger.info('📨 Received targeted command', { 
+          command: command.command, 
+          timestamp: command.timestamp 
+        });
+
+        // Process same commands as general queue
+        switch (command.command) {
+          case 'update_worker':
+            await updateManager.handleUpdateCommand(command.data);
+            break;
+            
+          case 'rebuild_worker':
+            await updateManager.handleRebuildCommand(command.data);
+            break;
+            
+          case 'update_points_config':
+            logger.info('📊 Received points configuration update');
+            if (pointsTracker && command.data) {
+              await pointsTracker.updateConfig(command.data);
+              logger.info('✅ Points configuration updated');
+            }
+            break;
+            
+          case 'suspend':
+            logger.info('Worker suspended by admin');
+            process.exit(0);
+            break;
+            
+          case 'resume':
+            logger.info('Worker resumed by admin');
+            break;
+            
+          default:
+            logger.warn('Unknown targeted command', { command: command.command });
+        }
+
+        channel.ack(msg);
+      } catch (error) {
+        logger.error('Failed to process targeted command', error);
+        channel.nack(msg, false, false);
+      }
+    });
 
     logger.info('✅ Connected to RabbitMQ and ready to receive commands');
     
@@ -419,6 +479,14 @@ async function startWorker() {
             
           case 'rebuild_worker':
             await updateManager.handleRebuildCommand(command.data);
+            break;
+          
+          case 'update_points_config':
+            logger.info('📊 Received points configuration update');
+            if (pointsTracker && command.data) {
+              await pointsTracker.updateConfig(command.data);
+              logger.info('✅ Points configuration updated');
+            }
             break;
           
           default:
