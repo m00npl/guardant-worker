@@ -13,8 +13,8 @@ services:
       - KEY_DIR=/keys
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./keys:/keys
-      - ./cache:/cache
+      - ./.keys:/keys
+      - ./.cache:/cache
     restart: unless-stopped
     networks:
       - guardant

@@ -42,7 +42,7 @@ RABBITMQ_URL=amqp://username:password@rabbit.guardant.me:5672
 docker compose restart
 ```
 
-## Scripts
+## Quick Commands
 
 ```bash
 # Start worker (handles initial setup)
@@ -54,6 +54,8 @@ docker compose restart
 # Update worker to latest version
 ./update.sh
 ```
+
+All scripts are located in the `scripts/` directory for better organization.
 
 ## Manual Commands
 
@@ -82,3 +84,23 @@ All configuration is done through environment variables in the `.env` file:
 - `WORKER_ID` - Worker identifier (auto-generated if not set)
 - `RABBITMQ_URL` - Connection URL (provided after approval)
 - `LOG_LEVEL` - Logging level: debug, info, warn, error (default: info)
+
+## Project Structure
+
+```
+.
+├── .cache/              # Temporary cache files
+├── .docs/               # Additional documentation
+├── .keys/               # Worker authentication keys
+├── scripts/             # Management scripts
+├── src/                 # Source code
+├── docker-compose.yml   # Docker configuration
+├── Dockerfile           # Container definition
+└── README.md            # This file
+```
+
+## Documentation
+
+- [Architecture Overview](.docs/ARCHITECTURE.md)
+- [Configuration Guide](.docs/CONFIGURATION.md)
+- [Troubleshooting](.docs/TROUBLESHOOTING.md)
