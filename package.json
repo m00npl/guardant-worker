@@ -1,0 +1,47 @@
+{
+  "name": "@guardant/worker-standalone",
+  "version": "1.0.0",
+  "description": "GuardAnt Worker - Standalone binary for monitoring",
+  "main": "dist/index.js",
+  "bin": {
+    "guardant-worker": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "build:binary": "npm run build && npm run package",
+    "package": "pkg . --out-path ./binaries",
+    "package:all": "pkg . --targets node18-linux-x64,node18-macos-arm64,node18-win-x64 --out-path ./binaries",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "pkg": {
+    "targets": [
+      "node18-linux-x64",
+      "node18-macos-arm64",
+      "node18-win-x64"
+    ],
+    "outputPath": "binaries",
+    "assets": [
+      "package.json"
+    ]
+  },
+  "dependencies": {
+    "dotenv": "^16.3.1",
+    "p-queue": "^7.4.1",
+    "pino": "^8.16.2",
+    "pino-pretty": "^10.3.0",
+    "socket.io-client": "^4.5.4",
+    "systeminformation": "^5.21.20"
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.4",
+    "esbuild": "^0.25.8",
+    "esbuild-node-externals": "^1.18.0",
+    "pkg": "^5.8.1",
+    "ts-loader": "^9.5.2",
+    "tsx": "^4.6.2",
+    "typescript": "^5.3.3",
+    "webpack": "^5.101.0",
+    "webpack-cli": "^6.0.1"
+  }
+}
