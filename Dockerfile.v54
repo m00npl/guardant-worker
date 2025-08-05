@@ -1,0 +1,31 @@
+FROM oven/bun:1-alpine
+
+# Install runtime dependencies
+RUN apk add --no-cache curl jq ca-certificates tzdata
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lock* ./
+
+# Install dependencies
+RUN bun install --production
+
+# Copy source code
+COPY src ./src
+
+# Create non-root user
+RUN addgroup -g 1001 -S worker && \
+    adduser -u 1001 -S worker -G worker && \
+    chown -R worker:worker /app
+
+USER worker
+
+# Environment variables
+ENV NODE_ENV=production \
+    LOG_LEVEL=info \
+    WORKER_VERSION=6.0.0 \
+    AUTO_DETECT_LOCATION=true
+
+# Default command - existing worker for compatibility
+CMD ["bun", "run", "src/index.ts"]

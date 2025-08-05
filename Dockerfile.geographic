@@ -1,0 +1,62 @@
+FROM oven/bun:1 AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lockb* ./
+COPY tsconfig.json ./
+
+# Install ALL dependencies
+RUN bun install
+
+# Copy source code (includes shared files)
+COPY src ./src
+
+# Build TypeScript with Bun
+RUN bun build ./src/auto-geographic-worker.ts --outdir ./dist --target node
+
+# Production stage
+FROM oven/bun:1-alpine
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    curl \
+    jq \
+    ca-certificates \
+    tzdata \
+    netcat-openbsd
+
+WORKDIR /app
+
+# Copy package files
+COPY package.json bun.lockb* ./
+
+# Install only production dependencies
+RUN bun install --production
+
+# Copy built files from builder
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/src ./src
+
+# Create non-root user
+RUN addgroup -g 1001 -S worker && \
+    adduser -u 1001 -S worker -G worker
+
+# Create necessary directories
+RUN mkdir -p /app/logs && \
+    chown -R worker:worker /app
+
+USER worker
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD curl -f http://localhost:3334/health || exit 1
+
+# Environment variables
+ENV NODE_ENV=production \
+    LOG_LEVEL=info \
+    WORKER_VERSION=2.0.0-geo \
+    AUTO_DETECT_LOCATION=true
+
+# Entry point with Bun
+CMD ["bun", "run", "dist/auto-geographic-worker.js"]

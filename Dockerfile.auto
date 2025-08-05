@@ -1,0 +1,44 @@
+FROM node:18-alpine
+
+# Install required packages
+RUN apk add --no-cache \
+    curl \
+    jq \
+    ca-certificates \
+    tzdata
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+COPY tsconfig.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy source code
+COPY src/ ./src/
+COPY shared/ ./shared/
+
+# Compile TypeScript
+RUN npx tsc
+
+# Create non-root user
+RUN addgroup -g 1001 -S worker && \
+    adduser -u 1001 -S worker -G worker
+
+# Switch to non-root user
+USER worker
+
+# Health check endpoint
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3334/health', (r) => {r.statusCode === 200 ? process.exit(0) : process.exit(1)})" || exit 1
+
+# Default environment variables (can be overridden)
+ENV NODE_ENV=production \
+    LOG_LEVEL=info \
+    WORKER_VERSION=2.0.0-auto
+
+# Start worker with auto-detection
+CMD ["node", "dist/auto-geographic-worker.js"]
