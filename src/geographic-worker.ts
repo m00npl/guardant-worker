@@ -11,7 +11,7 @@ import {
   RoutingKeyBuilder,
   EXCHANGES,
   QUEUE_PREFIXES
-} from '../../shared/geographic-hierarchy';
+} from './geographic-hierarchy';
 
 const logger = createLogger('geographic-worker');
 
@@ -54,11 +54,14 @@ export class GeographicWorker {
       // Connect to RabbitMQ
       await this.connectToRabbitMQ();
       
-      // Register with scheduler
-      await this.register();
+      // Setup exchanges first (before registration)
+      await this.setupExchanges();
       
       // Setup queues and bindings
       await this.setupQueues();
+      
+      // Register with scheduler (after exchanges exist)
+      await this.register();
       
       // Start heartbeat
       this.startHeartbeat();
@@ -69,8 +72,12 @@ export class GeographicWorker {
       logger.info(`✅ Worker ${this.config.workerId} started`, {
         location: this.config.location
       });
-    } catch (error) {
-      logger.error('Failed to start worker', error);
+    } catch (error: any) {
+      logger.error('Failed to start worker', {
+        message: error.message,
+        stack: error.stack,
+        code: error.code
+      });
       throw error;
     }
   }
@@ -142,13 +149,38 @@ export class GeographicWorker {
     logger.info(`✅ Worker registered with scheduler`);
   }
   
-  private async setupQueues() {
+  private async setupExchanges() {
     if (!this.channel) throw new Error('Channel not initialized');
     
-    // Assert exchanges
-    await this.channel.assertExchange(EXCHANGES.CHECKS, 'topic', { durable: true });
-    await this.channel.assertExchange(EXCHANGES.CLAIMS, 'direct', { durable: true });
-    await this.channel.assertExchange(EXCHANGES.RESULTS, 'topic', { durable: true });
+    // Create all needed exchanges
+    const exchanges = [
+      { name: EXCHANGES.CHECKS, type: 'topic' },
+      { name: EXCHANGES.CLAIMS, type: 'direct' },
+      { name: EXCHANGES.RESULTS, type: 'topic' },
+      { name: EXCHANGES.REGISTRATION, type: 'topic' },
+      { name: EXCHANGES.HEARTBEATS, type: 'topic' }
+    ];
+    
+    for (const ex of exchanges) {
+      try {
+        await this.channel.assertExchange(ex.name, ex.type, { durable: true });
+        logger.debug(`Created/verified exchange ${ex.name} (${ex.type})`);
+      } catch (error: any) {
+        // If exchange exists with wrong type, log and continue
+        if (error.message && error.message.includes('inequivalent')) {
+          logger.warn(`Exchange ${ex.name} exists with different type, using existing`);
+        } else {
+          logger.error(`Failed to create exchange ${ex.name}:`, error.message);
+          throw error;
+        }
+      }
+    }
+    
+    logger.info('✅ Exchanges configured');
+  }
+  
+  private async setupQueues() {
+    if (!this.channel) throw new Error('Channel not initialized');
     
     // Create worker-specific check queue
     const checkQueue = `${QUEUE_PREFIXES.WORKER_CHECKS}${this.config.workerId}`;
@@ -316,16 +348,30 @@ export class GeographicWorker {
       if (!this.channel) return;
       
       try {
+        const heartbeatData = {
+          workerId: this.config.workerId,
+          location: this.config.location,
+          timestamp: Date.now(),
+          lastSeen: Date.now(),
+          activeChecks: this.activeChecks.size,
+          uptime: Date.now() - this.registration.registeredAt,
+          // Required fields for HeartbeatVerifier
+          region: this.config.location.region || 'unknown',
+          version: this.config.version || '6.1.0',
+          checksCompleted: 0, // TODO: track actual checks completed
+          totalPoints: 0, // TODO: track actual points
+          currentPeriodPoints: 0,
+          earnings: {
+            points: 0,
+            estimatedUSD: 0,
+            estimatedCrypto: 0
+          }
+        };
+        
         await this.channel.publish(
           EXCHANGES.HEARTBEATS,
           'worker',
-          Buffer.from(JSON.stringify({
-            workerId: this.config.workerId,
-            location: this.config.location,
-            timestamp: Date.now(),
-            activeChecks: this.activeChecks.size,
-            uptime: Date.now() - this.registration.registeredAt
-          }))
+          Buffer.from(JSON.stringify(heartbeatData))
         );
         
         logger.debug('💓 Heartbeat sent');

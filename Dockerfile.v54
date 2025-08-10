@@ -24,9 +24,10 @@ USER worker
 # Environment variables
 ENV NODE_ENV=production \
     LOG_LEVEL=info \
-    WORKER_VERSION=6.0.2 \
+    WORKER_VERSION=6.1.0 \
     AUTO_DETECT_LOCATION=true \
-    BUILD_DATE=2025-01-11-v2
+    BUILD_DATE=2025-01-11-v3 \
+    COMPATIBILITY_MODE=true
 
-# Default command - NEW geographic worker with auto-detection
-CMD ["bun", "run", "src/auto-geographic-worker.ts"]
+# Default command - Compatible geographic worker that works with Worker Ant Program
+CMD ["bun", "run", "src/auto-geographic-worker-compat.ts"]

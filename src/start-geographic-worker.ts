@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { GeographicWorker, WorkerConfig } from './geographic-worker';
-import { GeographicLocation } from '../../shared/geographic-hierarchy';
+import { GeographicLocation } from './geographic-hierarchy';
 
 // Parse command line arguments or use environment variables
 const workerId = process.env.WORKER_ID || `worker-${Date.now()}`;

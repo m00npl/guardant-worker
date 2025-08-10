@@ -1,6 +1,6 @@
 import axios from 'axios';
 import os from 'os';
-import { GeographicLocation } from '../../shared/geographic-hierarchy';
+import { GeographicLocation } from './geographic-hierarchy';
 import { createLogger } from './logger';
 
 const logger = createLogger('location-detector');
@@ -11,6 +11,21 @@ export class LocationDetector {
     'https://ipapi.co/json/',
     'https://geolocation-db.com/json/'
   ];
+  
+  private static getStableWorkerId(): string {
+    // Always prefer WORKER_ID from environment
+    if (process.env.WORKER_ID) {
+      return process.env.WORKER_ID;
+    }
+    
+    // Generate a stable ID based on hostname
+    const hostname = os.hostname();
+    const hash = hostname.split('').reduce((acc, char) => {
+      return ((acc << 5) - acc) + char.charCodeAt(0);
+    }, 0);
+    
+    return `worker-${hostname}-${Math.abs(hash).toString(36)}`;
+  }
   
   private static readonly CLOUD_METADATA_ENDPOINTS = {
     // AWS EC2
@@ -103,7 +118,7 @@ export class LocationDetector {
         region: process.env.WORKER_REGION || 'unknown',
         country: process.env.WORKER_COUNTRY,
         city: process.env.WORKER_CITY || 'unknown',
-        workerId: process.env.WORKER_ID || `worker-${os.hostname()}-${Date.now()}`
+        workerId: LocationDetector.getStableWorkerId()
       };
     }
     
@@ -128,7 +143,7 @@ export class LocationDetector {
             logger.info(`Detected ${provider} environment`);
             return {
               ...location,
-              workerId: `worker-${provider}-${os.hostname()}-${Date.now()}`
+              workerId: LocationDetector.getStableWorkerId()
             };
           }
         }
@@ -178,7 +193,7 @@ export class LocationDetector {
           region,
           country,
           city,
-          workerId: `worker-${city}-${os.hostname()}-${Date.now()}`
+          workerId: LocationDetector.getStableWorkerId()
         };
       } catch (error) {
         logger.debug(`GeoIP service ${serviceUrl} failed`, error);
@@ -359,7 +374,7 @@ export class LocationDetector {
       region: 'unknown',
       country: 'unknown',
       city: 'unknown',
-      workerId: `worker-${os.hostname()}-${Date.now()}`
+      workerId: LocationDetector.getStableWorkerId()
     };
   }
 }

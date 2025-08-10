@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  test-geographic-worker:
+    image: guardant-worker:v6.1.0-debug
+    container_name: test-geographic-worker
+    environment:
+      # Worker Ant Program credentials (test)
+      WORKER_TOKEN: "test_token_123"
+      WORKER_ID: "test-geographic-001"
+      
+      # RabbitMQ credentials from Worker Ant Program
+      RABBITMQ_URL: "amqp://worker_test:securePassword123@localhost:5672"
+      
+      # Redis URL (using db.guardant.me)
+      REDIS_URL: "redis://localhost:16379"
+      
+      # Worker configuration
+      LOG_LEVEL: "debug"
+      AUTO_DETECT_LOCATION: "true"
+      WORKER_CAPABILITIES: "http,https,tcp,ping"
+      WORKER_VERSION: "6.1.0"
+      
+    network_mode: host
+    restart: unless-stopped
