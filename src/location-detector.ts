@@ -2,6 +2,7 @@ import axios from 'axios';
 import os from 'os';
 import { GeographicLocation } from './geographic-hierarchy';
 import { createLogger } from './logger';
+import { COUNTRY_TO_CONTINENT, CONTINENT_CODES, CONTINENT_REGIONS } from './country-mappings';
 
 const logger = createLogger('location-detector');
 
@@ -177,12 +178,28 @@ export class LocationDetector {
         const data = response.data;
         
         // Mapuj dane z różnych API
-        const continent = LocationDetector.mapContinent(
-          data.continent || data.continent_name || data.continentCode || 'EU'
-        );
-        const country = LocationDetector.normalizeString(
-          data.country || data.country_name || data.countryCode || 'unknown'
-        );
+        logger.debug('GeoIP response:', data);
+        
+        // Fix for country codes and normalize
+        let countryData = data.country || data.country_name || data.countryCode || 'unknown';
+        const normalizedCountry = LocationDetector.normalizeString(countryData);
+        
+        // Determine continent from country mapping first
+        let continent = COUNTRY_TO_CONTINENT[normalizedCountry] || 
+                       COUNTRY_TO_CONTINENT[countryData.toLowerCase()];
+        
+        // If not found in mapping, try from API data
+        if (!continent) {
+          const continentData = data.continent || data.continent_name || data.continentCode;
+          continent = LocationDetector.mapContinent(continentData);
+        }
+        
+        // If still unknown, use country to determine
+        if (continent === 'unknown' && normalizedCountry !== 'unknown') {
+          continent = COUNTRY_TO_CONTINENT[normalizedCountry] || 'unknown';
+        }
+        
+        const country = normalizedCountry;
         const city = LocationDetector.normalizeString(
           data.city || data.city_name || data.regionName || 'unknown'
         );
@@ -304,28 +321,9 @@ export class LocationDetector {
    * Pomocnicze funkcje
    */
   private static mapContinent(input: string): string {
+    if (!input) return 'unknown';
     const normalized = input.toUpperCase();
-    const mapping: Record<string, string> = {
-      'EU': 'europe',
-      'EUR': 'europe',
-      'EUROPE': 'europe',
-      'NA': 'northamerica',
-      'NORTH AMERICA': 'northamerica',
-      'NORTHAMERICA': 'northamerica',
-      'AS': 'asia',
-      'ASIA': 'asia',
-      'OC': 'oceania',
-      'OCEANIA': 'oceania',
-      'AU': 'oceania',
-      'AUSTRALIA': 'oceania',
-      'SA': 'southamerica',
-      'SOUTH AMERICA': 'southamerica',
-      'SOUTHAMERICA': 'southamerica',
-      'AF': 'africa',
-      'AFRICA': 'africa'
-    };
-    
-    return mapping[normalized] || 'europe';
+    return CONTINENT_CODES[normalized] || 'unknown';
   }
   
   private static normalizeString(input: string): string {
@@ -336,36 +334,8 @@ export class LocationDetector {
   }
   
   private static determineRegion(continent: string, country: string): string {
-    // Uproszczona logika określania regionu
-    const regionMap: Record<string, Record<string, string>> = {
-      'europe': {
-        'poland': 'north',
-        'germany': 'central',
-        'france': 'west',
-        'spain': 'south',
-        'sweden': 'north',
-        'finland': 'north',
-        'uk': 'west',
-        'ireland': 'west',
-        'italy': 'south',
-        'greece': 'south'
-      },
-      'northamerica': {
-        'usa': 'central',
-        'canada': 'north',
-        'mexico': 'south'
-      },
-      'asia': {
-        'japan': 'east',
-        'china': 'east',
-        'korea': 'east',
-        'india': 'south',
-        'singapore': 'southeast',
-        'thailand': 'southeast'
-      }
-    };
-    
-    return regionMap[continent]?.[country] || 'unknown';
+    // Use the comprehensive mapping from country-mappings
+    return CONTINENT_REGIONS[continent]?.[country] || 'general';
   }
   
   private static getFallbackLocation(): GeographicLocation {

@@ -1,0 +1,40 @@
+# Multi-arch Dockerfile for Raspberry Pi
+FROM node:18-alpine
+
+# Install build tools
+RUN apk add --no-cache \
+    curl \
+    jq \
+    tzdata \
+    python3 \
+    make \
+    g++ \
+    git \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Clone the repository
+RUN git clone https://github.com/moonplkr/guardant-worker-standalone.git /tmp/worker && \
+    cp -r /tmp/worker/* . && \
+    rm -rf /tmp/worker
+
+# Install dependencies
+RUN npm install && \
+    npm install typescript @types/node @types/amqplib
+
+# Build TypeScript
+RUN npx tsc || true
+
+# Check if dist directory exists and has index.js
+RUN ls -la dist/ || echo "No dist directory"
+
+# Set memory limits for Raspberry Pi
+ENV NODE_OPTIONS="--max-old-space-size=256"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD node -e "process.exit(0)" || exit 1
+
+# Start the worker
+CMD ["sh", "-c", "if [ -f dist/index.js ]; then node dist/index.js; elif [ -f src/index.js ]; then node src/index.js; elif [ -f index.js ]; then node index.js; else echo 'No index.js found' && ls -la && exit 1; fi"]

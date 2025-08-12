@@ -1,5 +1,4 @@
 import amqp, { Channel, Connection, ConsumeMessage } from 'amqplib';
-import Redis from 'ioredis';
 import axios from 'axios';
 import { createLogger } from './logger';
 import {
@@ -18,7 +17,6 @@ const logger = createLogger('geographic-worker');
 export interface WorkerConfig {
   workerId: string;
   location: GeographicLocation;
-  redisUrl: string;
   rabbitmqUrl: string;
   capabilities?: string[];
   version?: string;
@@ -27,7 +25,6 @@ export interface WorkerConfig {
 export class GeographicWorker {
   private connection: Connection | null = null;
   private channel: Channel | null = null;
-  private redis: Redis | null = null;
   private registration: WorkerRegistration;
   private activeChecks = new Map<string, NodeJS.Timeout>();
   private heartbeatInterval: NodeJS.Timeout | null = null;
@@ -48,9 +45,6 @@ export class GeographicWorker {
   
   async start() {
     try {
-      // Connect to Redis
-      await this.connectToRedis();
-      
       // Connect to RabbitMQ
       await this.connectToRabbitMQ();
       
@@ -82,17 +76,6 @@ export class GeographicWorker {
     }
   }
   
-  private async connectToRedis() {
-    const redisUrl = new URL(this.config.redisUrl);
-    this.redis = new Redis({
-      host: redisUrl.hostname,
-      port: parseInt(redisUrl.port) || 6379,
-      password: redisUrl.password || undefined,
-    });
-    
-    await this.redis.ping();
-    logger.info('✅ Connected to Redis');
-  }
   
   private async connectToRabbitMQ() {
     this.connection = await amqp.connect(this.config.rabbitmqUrl);
@@ -119,34 +102,80 @@ export class GeographicWorker {
   private async register() {
     if (!this.channel) throw new Error('Channel not initialized');
     
-    // Send registration message
-    await this.channel.publish(
-      EXCHANGES.REGISTRATION,
-      'register',
-      Buffer.from(JSON.stringify(this.registration))
-    );
+    let attempts = 0;
+    const maxAttempts = 10;
+    const ackTimeoutMs = 60000; // 60 seconds per attempt
     
-    // Wait for acknowledgment
-    const ackQueue = await this.channel.assertQueue('', { exclusive: true });
-    await this.channel.bindQueue(ackQueue.queue, EXCHANGES.REGISTRATION, `ack.${this.config.workerId}`);
-    
-    const ackReceived = await new Promise<boolean>((resolve) => {
-      const timeout = setTimeout(() => resolve(false), 5000);
+    while (attempts < maxAttempts) {
+      attempts++;
+      logger.info(`📤 Sending registration (attempt ${attempts}/${maxAttempts})...`);
       
-      this.channel!.consume(ackQueue.queue, (msg) => {
-        if (msg) {
-          clearTimeout(timeout);
-          this.channel!.ack(msg);
-          resolve(true);
-        }
+      // First setup ACK queue BEFORE sending registration
+      const ackQueue = await this.channel.assertQueue('', { exclusive: true });
+      const ackRoutingKey = `ack.${this.config.workerId}`;
+      await this.channel.bindQueue(ackQueue.queue, EXCHANGES.REGISTRATION, ackRoutingKey);
+      
+      logger.info(`📮 ACK queue ready: ${ackQueue.queue} bound to ${EXCHANGES.REGISTRATION} with key: ${ackRoutingKey}`);
+      
+      // NOW send registration message (after ACK queue is ready)
+      await this.channel.publish(
+        EXCHANGES.REGISTRATION,
+        'register',
+        Buffer.from(JSON.stringify(this.registration))
+      );
+      
+      logger.info(`⏳ Waiting for ACK on ${ackRoutingKey} (timeout: ${ackTimeoutMs/1000}s)`);
+      
+      const ackReceived = await new Promise<boolean>((resolve) => {
+        const timeout = setTimeout(() => {
+          logger.warn(`⏱️ ACK timeout for ${this.config.workerId} after ${ackTimeoutMs/1000} seconds (attempt ${attempts}/${maxAttempts})`);
+          resolve(false);
+        }, ackTimeoutMs);
+        
+        this.channel!.consume(ackQueue.queue, (msg) => {
+          logger.debug(`🔔 Message received on ACK queue`);
+          if (msg) {
+            try {
+              logger.debug(`📦 Message details:`, {
+                exchange: msg.fields.exchange,
+                routingKey: msg.fields.routingKey,
+                contentType: msg.properties.contentType
+              });
+              const ackData = JSON.parse(msg.content.toString());
+              logger.info(`📨 Received ACK:`, ackData);
+              clearTimeout(timeout);
+              this.channel!.ack(msg);
+              resolve(true);
+            } catch (err) {
+              logger.error(`❌ Failed to parse ACK message:`, err);
+              logger.error(`Raw message:`, msg.content.toString());
+            }
+          } else {
+            logger.debug(`⚠️ Null message received`);
+          }
+        }, { noAck: false }).then(result => {
+          logger.debug(`👂 Consumer started with tag: ${result.consumerTag}`);
+        });
       });
-    });
-    
-    if (!ackReceived) {
-      throw new Error('Registration not acknowledged by scheduler');
+      
+      if (ackReceived) {
+        logger.info(`✅ Worker registered with scheduler after ${attempts} attempt(s)`);
+        return;
+      }
+      
+      // Clean up failed queue before retry
+      await this.channel.deleteQueue(ackQueue.queue);
+      
+      if (attempts < maxAttempts) {
+        logger.warn(`⚠️ Registration not acknowledged, retrying in 10 seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 10000));
+      }
     }
     
-    logger.info(`✅ Worker registered with scheduler`);
+    // After all attempts failed
+    logger.error(`❌ Failed to register after ${maxAttempts} attempts. Worker will continue without scheduler confirmation.`);
+    logger.info(`💪 Worker proceeding in standalone mode - will process any incoming check requests`);
+    // Don't throw error - let worker continue running
   }
   
   private async setupExchanges() {
@@ -401,7 +430,6 @@ export class GeographicWorker {
     // Close connections
     if (this.channel) await this.channel.close();
     if (this.connection) await this.connection.close();
-    if (this.redis) this.redis.disconnect();
     
     logger.info('Worker stopped');
   }

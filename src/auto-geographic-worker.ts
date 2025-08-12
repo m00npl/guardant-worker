@@ -21,7 +21,6 @@ interface RegistrationResponse {
 interface StatusResponse {
   approved: boolean;
   rabbitmqUrl?: string;
-  redisUrl?: string;
   geographic?: {
     continent?: string;
     region?: string;
@@ -80,11 +79,11 @@ async function checkWorkerStatus(workerId: string): Promise<StatusResponse | nul
   }
 }
 
-async function saveCredentials(workerId: string, rabbitmqUrl: string, redisUrl?: string) {
+async function saveCredentials(workerId: string, rabbitmqUrl: string) {
   try {
     await fs.writeFile(
       CREDENTIALS_FILE,
-      JSON.stringify({ workerId, rabbitmqUrl, redisUrl }, null, 2)
+      JSON.stringify({ workerId, rabbitmqUrl }, null, 2)
     );
     logger.info('💾 Credentials saved locally');
   } catch (error) {
@@ -92,7 +91,7 @@ async function saveCredentials(workerId: string, rabbitmqUrl: string, redisUrl?:
   }
 }
 
-async function loadCredentials(): Promise<{ workerId: string; rabbitmqUrl: string; redisUrl?: string } | null> {
+async function loadCredentials(): Promise<{ workerId: string; rabbitmqUrl: string } | null> {
   try {
     const data = await fs.readFile(CREDENTIALS_FILE, 'utf-8');
     return JSON.parse(data);
@@ -142,7 +141,6 @@ async function startAutoWorker() {
     console.log(`╚═══════════════════════════════════════════════════════╝\n`);
     
     let rabbitmqUrl = process.env.RABBITMQ_URL;
-    let redisUrl = process.env.REDIS_URL;
     
     // Check if we have saved credentials
     const savedCreds = await loadCredentials();
@@ -153,7 +151,6 @@ async function startAutoWorker() {
       if (status && status.approved) {
         logger.info('✅ Using existing approved credentials');
         rabbitmqUrl = savedCreds.rabbitmqUrl;
-        redisUrl = savedCreds.redisUrl || redisUrl;
       }
     }
     
@@ -172,8 +169,7 @@ async function startAutoWorker() {
       
       // Save credentials
       rabbitmqUrl = approval.rabbitmqUrl!;
-      redisUrl = approval.redisUrl || redisUrl || 'redis://db.guardant.me:16379';
-      await saveCredentials(location.workerId, rabbitmqUrl, redisUrl);
+      await saveCredentials(location.workerId, rabbitmqUrl);
       
       // Update location if provided by admin
       if (approval.geographic) {
@@ -190,16 +186,14 @@ async function startAutoWorker() {
     const config: WorkerConfig = {
       workerId: location.workerId,
       location: location,
-      redisUrl: redisUrl || 'redis://db.guardant.me:16379',
       rabbitmqUrl: rabbitmqUrl!,
       capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
-      version: process.env.WORKER_VERSION || '6.0.7'
+      version: process.env.WORKER_VERSION || '6.1.3'
     };
     
     logger.info('🔧 Worker configuration:', {
       workerId: config.workerId,
       location: `${location.continent}.${location.region}.${location.country}.${location.city}`,
-      redisUrl: config.redisUrl.replace(/:[^:@]+@/, ':****@'),
       rabbitmqUrl: config.rabbitmqUrl.replace(/:[^:@]+@/, ':****@'),
       capabilities: config.capabilities,
       version: config.version

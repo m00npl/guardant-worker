@@ -1,12 +1,13 @@
 # GuardAnt Worker Docker Image
-FROM node:18-alpine
+FROM oven/bun:1-alpine
 
 # Install required tools
 RUN apk add --no-cache \
     curl \
     wget \
     bash \
-    tini
+    tini \
+    nodejs
 
 # Create app directory
 WORKDIR /app
@@ -17,16 +18,16 @@ COPY tsconfig.json ./
 COPY esbuild.config.js ./
 
 # Install dependencies
-RUN npm install
+RUN bun install
 
-# Copy source - only index.ts
-COPY src/index.ts ./src/
+# Copy all source files
+COPY src/ ./src/
 
-# Build using esbuild
-RUN node esbuild.config.js
+# Build the auto-geographic-worker
+RUN bun build ./src/auto-geographic-worker.ts --target bun --outfile ./dist/auto-geographic-worker.js
 
-# Remove dev dependencies
-RUN npm prune --production
+# Clean up dev dependencies (bun doesn't need prune)
+RUN rm -rf node_modules/.cache
 
 # Create non-root user
 RUN addgroup -g 1001 -S worker && \
@@ -51,4 +52,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 ENTRYPOINT ["/sbin/tini", "--"]
 
 # Start the worker
-CMD ["node", "dist/bundle.js"]
+CMD ["bun", "dist/auto-geographic-worker.js"]

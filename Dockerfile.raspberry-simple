@@ -1,0 +1,27 @@
+# Simple ARM Dockerfile using pre-built worker
+FROM moonplkr/guardant-worker:latest AS source
+
+# Build final ARM image
+FROM node:18-alpine
+
+# Install runtime dependencies
+RUN apk add --no-cache \
+    curl \
+    jq \
+    tzdata \
+    && rm -rf /var/cache/apk/*
+
+WORKDIR /app
+
+# Copy built application from main image
+COPY --from=source /app /app
+
+# Set memory limits for Raspberry Pi
+ENV NODE_OPTIONS="--max-old-space-size=256"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD node -e "process.exit(0)" || exit 1
+
+# Start the worker (using Bun's built output)
+CMD ["node", "/app/index.js"]

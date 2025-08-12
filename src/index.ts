@@ -5,6 +5,7 @@ import PQueue from 'p-queue';
 import pino from 'pino';
 import { createHash } from 'crypto';
 import { hostname } from 'os';
+import { generateUniqueWorkerIdSync } from './worker-id-generator';
 
 // Load environment variables
 config();
@@ -94,7 +95,7 @@ class GuardAntWorker {
   }
 
   private loadConfig(): WorkerConfig {
-    const workerId = process.env.WORKER_ID || this.generateWorkerId();
+    const workerId = process.env.WORKER_ID || generateUniqueWorkerIdSync();
     const workerToken = process.env.WORKER_TOKEN || '';
     
     if (!workerToken) {
@@ -114,11 +115,6 @@ class GuardAntWorker {
     };
   }
 
-  private generateWorkerId(): string {
-    const hash = createHash('sha256');
-    hash.update(hostname() + Date.now().toString());
-    return `worker_${hash.digest('hex').substring(0, 12)}`;
-  }
 
   async start(): Promise<void> {
     logger.info('Starting GuardAnt Worker...');
