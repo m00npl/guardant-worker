@@ -335,7 +335,8 @@ export class GeographicWorker {
         responseTime,
         timestamp: Date.now(),
         workerId: this.config.workerId,
-        location: this.config.location
+        location: this.config.location,
+        region: this.config.location.city || this.config.location.country || this.config.location.region || 'unknown'
       };
     } catch (error: any) {
       return {
@@ -344,6 +345,7 @@ export class GeographicWorker {
         timestamp: Date.now(),
         workerId: this.config.workerId,
         location: this.config.location,
+        region: this.config.location.city || this.config.location.country || this.config.location.region || 'unknown',
         error: error.message || 'Check failed'
       };
     }
