@@ -292,8 +292,8 @@ export class GeographicWorker {
     
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        logger.warn(`Claim timeout for task ${task.id}, proceeding anyway`);
-        resolve(true); // Proceed if no response (fail-safe)
+        logger.warn(`Claim timeout for task ${task.id}, skipping check`);
+        resolve(false); // Don't proceed on timeout - scheduler didn't approve
       }, this.CLAIM_TIMEOUT);
       
       const consumer = this.channel!.consume(claimQueue, (msg) => {

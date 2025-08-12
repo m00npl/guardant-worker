@@ -26761,8 +26761,8 @@ class GeographicWorker {
     const claimQueue = `${QUEUE_PREFIXES.WORKER_CLAIMS}${this.config.workerId}`;
     return new Promise((resolve) => {
       const timeout = setTimeout(() => {
-        logger.warn(`Claim timeout for task ${task.id}, proceeding anyway`);
-        resolve(true);
+        logger.warn(`Claim timeout for task ${task.id}, skipping check`);
+        resolve(false);
       }, this.CLAIM_TIMEOUT);
       const consumer = this.channel.consume(claimQueue, (msg) => {
         if (!msg)
