@@ -28,6 +28,8 @@ export class GeographicWorker {
   private registration: WorkerRegistration;
   private activeChecks = new Map<string, NodeJS.Timeout>();
   private heartbeatInterval: NodeJS.Timeout | null = null;
+  private cachedIP: string | null = null;
+  private cachedIPTime: number = 0;
   private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
   private readonly CHECK_TIMEOUT = 30000; // 30 seconds
   private readonly CLAIM_TIMEOUT = 2000; // 2 seconds
@@ -379,9 +381,29 @@ export class GeographicWorker {
       if (!this.channel) return;
       
       try {
+        // Try to get public IP (cached for efficiency)
+        let publicIP = null;
+        if (!this.cachedIP || Date.now() - this.cachedIPTime > 3600000) { // Refresh every hour
+          try {
+            const response = await fetch('https://api.ipify.org?format=json', { 
+              signal: AbortSignal.timeout(5000) 
+            });
+            const data = await response.json();
+            this.cachedIP = data.ip;
+            this.cachedIPTime = Date.now();
+            publicIP = data.ip;
+          } catch (err) {
+            // Use cached IP if fetch fails
+            publicIP = this.cachedIP;
+          }
+        } else {
+          publicIP = this.cachedIP;
+        }
+
         const heartbeatData = {
           workerId: this.config.workerId,
           location: this.config.location,
+          ip: publicIP, // Include IP for server-side geolocation
           timestamp: Date.now(),
           lastSeen: Date.now(),
           activeChecks: this.activeChecks.size,
