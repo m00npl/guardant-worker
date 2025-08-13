@@ -1,5 +1,5 @@
 export class UpdateManager {
-  private currentVersion = '6.4.0';
+  private currentVersion = '6.5.0';
   
   getCurrentVersion() {
     return this.currentVersion;
