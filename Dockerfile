@@ -15,7 +15,6 @@ WORKDIR /app
 # Copy only necessary files
 COPY package*.json ./
 COPY tsconfig.json ./
-COPY esbuild.config.js ./
 
 # Install dependencies
 RUN bun install
@@ -23,8 +22,12 @@ RUN bun install
 # Copy all source files
 COPY src/ ./src/
 
-# Build the auto-geographic-worker
-RUN bun build ./src/auto-geographic-worker.ts --target bun --outfile ./dist/auto-geographic-worker.js
+# Copy dist directory
+COPY dist/ ./dist/
+
+# Build the main workers
+RUN bun build ./src/auto-geographic-worker.ts --target bun --outfile ./dist/auto-geographic-worker.js && \
+    bun build ./src/rabbitmq-worker.ts --target bun --outfile ./dist/rabbitmq-worker.js || true
 
 # Clean up dev dependencies (bun doesn't need prune)
 RUN rm -rf node_modules/.cache

@@ -1,4 +1,220 @@
 #!/usr/bin/env node
-"use strict";var J=Object.create;var y=Object.defineProperty;var V=Object.getOwnPropertyDescriptor;var Y=Object.getOwnPropertyNames;var Z=Object.getPrototypeOf,X=Object.prototype.hasOwnProperty;var m=(r,e)=>()=>(r&&(e=r(r=0)),e);var E=(r,e)=>{for(var a in e)y(r,a,{get:e[a],enumerable:!0})},$=(r,e,a,t)=>{if(e&&typeof e=="object"||typeof e=="function")for(let n of Y(e))!X.call(r,n)&&n!==a&&y(r,n,{get:()=>e[n],enumerable:!(t=V(e,n))||t.enumerable});return r};var w=(r,e,a)=>(a=r!=null?J(Z(r)):{},$(e||!r||!r.__esModule?y(a,"default",{value:r,enumerable:!0}):a,r)),R=r=>$(y({},"__esModule",{value:!0}),r);function L(r){let e=`[${r}]`;return{debug:(a,t)=>{process.env.LOG_LEVEL==="debug"&&console.log(`${new Date().toISOString()} DEBUG ${e} ${a}`,t||"")},info:(a,t)=>{console.log(`${new Date().toISOString()} INFO ${e} ${a}`,t||"")},warn:(a,t)=>{console.warn(`${new Date().toISOString()} WARN ${e} ${a}`,t||"")},error:(a,t)=>{console.error(`${new Date().toISOString()} ERROR ${e} ${a}`,t||"")}}}var N=m(()=>{"use strict"});var b,u,f,z=m(()=>{"use strict";b=class{static buildKey(e,a){let t=[];return e.continent&&t.push(e.continent),e.region&&t.push(e.region),e.country&&t.push(e.country),e.city&&t.push(e.city),e.workerId&&t.push(e.workerId),a&&t.length<5&&t.push("*"),t.join(".")}static parseKey(e){let a=e.split("."),t={};return a[0]&&a[0]!=="*"&&(t.continent=a[0]),a[1]&&a[1]!=="*"&&(t.region=a[1]),a[2]&&a[2]!=="*"&&(t.country=a[2]),a[3]&&a[3]!=="*"&&(t.city=a[3]),a[4]&&a[4]!=="*"&&(t.workerId=a[4]),t}static getWorkerBindings(e){return[`check.${e.continent}.${e.region}.${e.country}.${e.city}.${e.workerId}`,`check.${e.continent}.${e.region}.${e.country}.${e.city}.*`,`check.${e.continent}.${e.region}.${e.country}.*.*`,`check.${e.continent}.${e.region}.*.*.*`,`check.${e.continent}.*.*.*.*`,"check.*.*.*.*.*"]}},u={CHECKS:"monitoring.checks",CLAIMS:"monitoring.claims",HEARTBEATS:"monitoring.heartbeats",REGISTRATION:"monitoring.registration",RESULTS:"monitoring.results"},f={WORKER_CHECKS:"worker.checks.",WORKER_CLAIMS:"worker.claims.",SCHEDULER_HEARTBEATS:"scheduler.heartbeats",SCHEDULER_REGISTRATION:"scheduler.registration",SCHEDULER_RESULTS:"scheduler.results"}});var G={};E(G,{GeographicWorker:()=>S});var P,_,i,S,W=m(()=>{"use strict";P=w(require("amqplib")),_=w(require("axios"));N();z();i=L("geographic-worker"),S=class{constructor(e){this.config=e;this.registration={workerId:e.workerId,location:e.location,capabilities:e.capabilities||["http","https"],version:e.version||"1.0.0",registeredAt:Date.now(),lastHeartbeat:Date.now()}}connection=null;channel=null;registration;activeChecks=new Map;heartbeatInterval=null;cachedIP=null;cachedIPTime=0;checksCompleted=0;totalPoints=0;HEARTBEAT_INTERVAL=3e4;CHECK_TIMEOUT=3e4;CLAIM_TIMEOUT=2e3;async start(){try{await this.connectToRabbitMQ(),await this.setupExchanges(),await this.setupQueues(),await this.register(),this.startHeartbeat(),await this.listenForChecks(),i.info(`\u2705 Worker ${this.config.workerId} started`,{location:this.config.location})}catch(e){throw i.error("Failed to start worker",{message:e.message,stack:e.stack,code:e.code}),e}}async connectToRabbitMQ(){this.connection=await P.default.connect(this.config.rabbitmqUrl),this.connection.on("error",e=>{i.error("RabbitMQ connection error",e),this.reconnect()}),this.connection.on("close",()=>{i.warn("RabbitMQ connection closed"),this.reconnect()}),this.channel=await this.connection.createChannel(),i.info("\u2705 Connected to RabbitMQ")}async reconnect(){i.info("Attempting to reconnect..."),setTimeout(()=>this.start(),5e3)}async register(){if(!this.channel)throw new Error("Channel not initialized");let e=0,a=10,t=6e4;for(;e<a;){e++,i.info(`\u{1F4E4} Sending registration (attempt ${e}/${a})...`);let n=await this.channel.assertQueue("",{exclusive:!0}),c=`ack.${this.config.workerId}`;if(await this.channel.bindQueue(n.queue,u.REGISTRATION,c),i.info(`\u{1F4EE} ACK queue ready: ${n.queue} bound to ${u.REGISTRATION} with key: ${c}`),await this.channel.publish(u.REGISTRATION,"register",Buffer.from(JSON.stringify(this.registration))),i.info(`\u23F3 Waiting for ACK on ${c} (timeout: ${t/1e3}s)`),await new Promise(o=>{let p=setTimeout(()=>{i.warn(`\u23F1\uFE0F ACK timeout for ${this.config.workerId} after ${t/1e3} seconds (attempt ${e}/${a})`),o(!1)},t);this.channel.consume(n.queue,g=>{if(i.debug("\u{1F514} Message received on ACK queue"),g)try{i.debug("\u{1F4E6} Message details:",{exchange:g.fields.exchange,routingKey:g.fields.routingKey,contentType:g.properties.contentType});let d=JSON.parse(g.content.toString());i.info("\u{1F4E8} Received ACK:",d),clearTimeout(p),this.channel.ack(g),o(!0)}catch(d){i.error("\u274C Failed to parse ACK message:",d),i.error("Raw message:",g.content.toString())}else i.debug("\u26A0\uFE0F Null message received")},{noAck:!1}).then(g=>{i.debug(`\u{1F442} Consumer started with tag: ${g.consumerTag}`)})})){i.info(`\u2705 Worker registered with scheduler after ${e} attempt(s)`);return}await this.channel.deleteQueue(n.queue),e<a&&(i.warn("\u26A0\uFE0F Registration not acknowledged, retrying in 10 seconds..."),await new Promise(o=>setTimeout(o,1e4)))}i.error(`\u274C Failed to register after ${a} attempts. Worker will continue without scheduler confirmation.`),i.info("\u{1F4AA} Worker proceeding in standalone mode - will process any incoming check requests")}async setupExchanges(){if(!this.channel)throw new Error("Channel not initialized");let e=[{name:u.CHECKS,type:"topic"},{name:u.CLAIMS,type:"direct"},{name:u.RESULTS,type:"topic"},{name:u.REGISTRATION,type:"topic"},{name:u.HEARTBEATS,type:"topic"}];for(let a of e)try{await this.channel.assertExchange(a.name,a.type,{durable:!0}),i.debug(`Created/verified exchange ${a.name} (${a.type})`)}catch(t){if(t.message&&t.message.includes("inequivalent"))i.warn(`Exchange ${a.name} exists with different type, using existing`);else throw i.error(`Failed to create exchange ${a.name}:`,t.message),t}i.info("\u2705 Exchanges configured")}async setupQueues(){if(!this.channel)throw new Error("Channel not initialized");let e=`${f.WORKER_CHECKS}${this.config.workerId}`;await this.channel.assertQueue(e,{durable:!0});let a=b.getWorkerBindings(this.config.location);for(let n of a)await this.channel.bindQueue(e,u.CHECKS,n),i.debug(`Bound to routing key: ${n}`);let t=`${f.WORKER_CLAIMS}${this.config.workerId}`;await this.channel.assertQueue(t,{durable:!0}),await this.channel.bindQueue(t,u.CLAIMS,`response.${this.config.workerId}`),i.info("\u2705 Queues and bindings configured")}async listenForChecks(){if(!this.channel)throw new Error("Channel not initialized");let e=`${f.WORKER_CHECKS}${this.config.workerId}`;await this.channel.consume(e,async a=>{if(a)try{let t=JSON.parse(a.content.toString());if(i.info(`\u{1F4E5} Received check task ${t.id}`,{serviceId:t.serviceId,target:t.target}),!await this.claimTask(t)){i.info(`\u274C Task ${t.id} claimed by another worker, skipping`),this.channel.ack(a);return}let c=await this.executeCheck(t);await this.sendResult(t,c),this.channel.ack(a)}catch(t){i.error("Failed to process check",t),this.channel.nack(a,!1,!1)}}),i.info("\u{1F442} Listening for check tasks")}async claimTask(e){if(!this.channel)throw new Error("Channel not initialized");let a={taskId:e.id,workerId:this.config.workerId,timestamp:Date.now()};await this.channel.publish(u.CLAIMS,"request",Buffer.from(JSON.stringify(a)));let t=`${f.WORKER_CLAIMS}${this.config.workerId}`;return new Promise(n=>{let c=setTimeout(()=>{i.warn(`Claim timeout for task ${e.id}, skipping check`),n(!1)},this.CLAIM_TIMEOUT),l=this.channel.consume(t,o=>{if(o)try{let p=JSON.parse(o.content.toString());p.taskId===e.id&&(clearTimeout(c),this.channel.ack(o),this.channel.cancel(l.consumerTag),n(p.approved))}catch(p){i.error("Failed to parse claim response",p)}})})}async executeCheck(e){let a=Date.now();try{let t=await(0,_.default)({method:e.config?.method||"GET",url:e.target,timeout:this.CHECK_TIMEOUT,headers:e.config?.headers||{},validateStatus:()=>!0}),n=Date.now()-a;return{status:t.status<400?"up":"down",statusCode:t.status,responseTime:n,timestamp:Date.now(),workerId:this.config.workerId,location:this.config.location,region:this.config.location.city||this.config.location.country||this.config.location.region||"unknown"}}catch(t){return{status:"down",responseTime:Date.now()-a,timestamp:Date.now(),workerId:this.config.workerId,location:this.config.location,region:this.config.location.city||this.config.location.country||this.config.location.region||"unknown",error:t.message||"Check failed"}}}async sendResult(e,a){if(!this.channel)throw new Error("Channel not initialized");let t={taskId:e.id,serviceId:e.serviceId,nestId:e.nestId,...a};await this.channel.publish(u.RESULTS,`check.${this.config.workerId}`,Buffer.from(JSON.stringify(t)),{persistent:!0}),i.info(`\u2705 Result sent for task ${e.id}`,{status:a.status,responseTime:a.responseTime})}startHeartbeat(){this.heartbeatInterval=setInterval(async()=>{if(this.channel)try{let e=null;if(!this.cachedIP||Date.now()-this.cachedIPTime>36e5)try{let n=await(await fetch("https://api.ipify.org?format=json",{signal:AbortSignal.timeout(5e3)})).json();this.cachedIP=n.ip,this.cachedIPTime=Date.now(),e=n.ip}catch{e=this.cachedIP}else e=this.cachedIP;let a={workerId:this.config.workerId,location:this.config.location,ip:e,timestamp:Date.now(),lastSeen:Date.now(),activeChecks:this.activeChecks.size,uptime:Date.now()-this.registration.registeredAt,region:this.config.location.region||"unknown",version:this.config.version||"6.4.4",checksCompleted:0,totalPoints:0,currentPeriodPoints:0,earnings:{points:0,estimatedUSD:0,estimatedCrypto:0}};await this.channel.publish(u.HEARTBEATS,"worker",Buffer.from(JSON.stringify(a))),i.debug("\u{1F493} Heartbeat sent")}catch(e){i.error("Failed to send heartbeat",e)}},this.HEARTBEAT_INTERVAL)}async stop(){i.info("Stopping worker..."),this.heartbeatInterval&&clearInterval(this.heartbeatInterval),this.channel&&await this.channel.publish(u.REGISTRATION,"unregister",Buffer.from(JSON.stringify({workerId:this.config.workerId}))),this.channel&&await this.channel.close(),this.connection&&await this.connection.close(),i.info("Worker stopped")}}});var D={};E(D,{createLogger:()=>k,default:()=>ee});function k(r){let e=`[${r}]`;return{debug:(a,t)=>{process.env.LOG_LEVEL==="debug"&&console.log(`${new Date().toISOString()} DEBUG ${e} ${a}`,t||"")},info:(a,t)=>{console.log(`${new Date().toISOString()} INFO ${e} ${a}`,t||"")},warn:(a,t)=>{console.warn(`${new Date().toISOString()} WARN ${e} ${a}`,t||"")},error:(a,t)=>{console.error(`${new Date().toISOString()} ERROR ${e} ${a}`,t||"")}}}var ee,C=m(()=>{"use strict";ee=k});var v,U,x,M=m(()=>{"use strict";v={albania:"europe",al:"europe",andorra:"europe",ad:"europe",armenia:"europe",am:"europe",austria:"europe",at:"europe",azerbaijan:"europe",az:"europe",belarus:"europe",by:"europe",belgium:"europe",be:"europe","bosnia and herzegovina":"europe",ba:"europe",bulgaria:"europe",bg:"europe",croatia:"europe",hr:"europe",cyprus:"europe",cy:"europe","czech republic":"europe",czechia:"europe",cz:"europe",denmark:"europe",dk:"europe",estonia:"europe",ee:"europe",finland:"europe",fi:"europe",france:"europe",fr:"europe",georgia:"europe",ge:"europe",germany:"europe",de:"europe",greece:"europe",gr:"europe",hungary:"europe",hu:"europe",iceland:"europe",is:"europe",ireland:"europe",ie:"europe",italy:"europe",it:"europe",kosovo:"europe",xk:"europe",latvia:"europe",lv:"europe",liechtenstein:"europe",li:"europe",lithuania:"europe",lt:"europe",luxembourg:"europe",lu:"europe",macedonia:"europe",mk:"europe",malta:"europe",mt:"europe",moldova:"europe",md:"europe",monaco:"europe",mc:"europe",montenegro:"europe",me:"europe",netherlands:"europe",nl:"europe",norway:"europe",no:"europe",poland:"europe",pl:"europe",portugal:"europe",pt:"europe",romania:"europe",ro:"europe",russia:"europe",ru:"europe","san marino":"europe",sm:"europe",serbia:"europe",rs:"europe",slovakia:"europe",sk:"europe",slovenia:"europe",si:"europe",spain:"europe",es:"europe",sweden:"europe",se:"europe",switzerland:"europe",ch:"europe",turkey:"europe",tr:"europe",ukraine:"europe",ua:"europe","united kingdom":"europe",uk:"europe",gb:"europe","vatican city":"europe",va:"europe",canada:"northamerica",ca:"northamerica","united states":"northamerica",usa:"northamerica",us:"northamerica",mexico:"northamerica",mx:"northamerica",guatemala:"northamerica",gt:"northamerica",belize:"northamerica",bz:"northamerica","el salvador":"northamerica",sv:"northamerica",honduras:"northamerica",hn:"northamerica",nicaragua:"northamerica",ni:"northamerica","costa rica":"northamerica",cr:"northamerica",panama:"northamerica",pa:"northamerica",bahamas:"northamerica",bs:"northamerica",cuba:"northamerica",cu:"northamerica",jamaica:"northamerica",jm:"northamerica",haiti:"northamerica",ht:"northamerica","dominican republic":"northamerica",do:"northamerica",barbados:"northamerica",bb:"northamerica","trinidad and tobago":"northamerica",tt:"northamerica",argentina:"southamerica",ar:"southamerica",bolivia:"southamerica",bo:"southamerica",brazil:"southamerica",br:"southamerica",chile:"southamerica",cl:"southamerica",colombia:"southamerica",co:"southamerica",ecuador:"southamerica",ec:"southamerica",guyana:"southamerica",gy:"southamerica",paraguay:"southamerica",py:"southamerica",peru:"southamerica",pe:"southamerica",suriname:"southamerica",sr:"southamerica",uruguay:"southamerica",uy:"southamerica",venezuela:"southamerica",ve:"southamerica",afghanistan:"asia",af:"asia",bahrain:"asia",bh:"asia",bangladesh:"asia",bd:"asia",bhutan:"asia",bt:"asia",brunei:"asia",bn:"asia",cambodia:"asia",kh:"asia",china:"asia",cn:"asia",india:"asia",in:"asia",indonesia:"asia",id:"asia",iran:"asia",ir:"asia",iraq:"asia",iq:"asia",israel:"asia",il:"asia",japan:"asia",jp:"asia",jordan:"asia",jo:"asia",kazakhstan:"asia",kz:"asia",kuwait:"asia",kw:"asia",kyrgyzstan:"asia",kg:"asia",laos:"asia",la:"asia",lebanon:"asia",lb:"asia",malaysia:"asia",my:"asia",maldives:"asia",mv:"asia",mongolia:"asia",mn:"asia",myanmar:"asia",mm:"asia",nepal:"asia",np:"asia","north korea":"asia",kp:"asia",oman:"asia",om:"asia",pakistan:"asia",pk:"asia",philippines:"asia",ph:"asia",qatar:"asia",qa:"asia","saudi arabia":"asia",sa:"asia",singapore:"asia",sg:"asia","south korea":"asia",korea:"asia",kr:"asia","sri lanka":"asia",lk:"asia",syria:"asia",sy:"asia",taiwan:"asia",tw:"asia",tajikistan:"asia",tj:"asia",thailand:"asia",th:"asia","timor-leste":"asia",tl:"asia",turkmenistan:"asia",tm:"asia","united arab emirates":"asia",uae:"asia",ae:"asia",uzbekistan:"asia",uz:"asia",vietnam:"asia",vn:"asia",yemen:"asia",ye:"asia",algeria:"africa",dz:"africa",angola:"africa",ao:"africa",benin:"africa",bj:"africa",botswana:"africa",bw:"africa","burkina faso":"africa",bf:"africa",burundi:"africa",bi:"africa",cameroon:"africa",cm:"africa","cape verde":"africa",cv:"africa","central african republic":"africa",cf:"africa",chad:"africa",td:"africa",comoros:"africa",km:"africa",congo:"africa",cg:"africa","democratic republic of the congo":"africa",cd:"africa",djibouti:"africa",dj:"africa",egypt:"africa",eg:"africa","equatorial guinea":"africa",gq:"africa",eritrea:"africa",er:"africa",ethiopia:"africa",et:"africa",gabon:"africa",ga:"africa",gambia:"africa",gm:"africa",ghana:"africa",gh:"africa",guinea:"africa",gn:"africa","guinea-bissau":"africa",gw:"africa","ivory coast":"africa",ci:"africa",kenya:"africa",ke:"africa",lesotho:"africa",ls:"africa",liberia:"africa",lr:"africa",libya:"africa",ly:"africa",madagascar:"africa",mg:"africa",malawi:"africa",mw:"africa",mali:"africa",ml:"africa",mauritania:"africa",mr:"africa",mauritius:"africa",mu:"africa",morocco:"africa",ma:"africa",mozambique:"africa",mz:"africa",namibia:"africa",na:"africa",niger:"africa",ne:"africa",nigeria:"africa",ng:"africa",rwanda:"africa",rw:"africa",senegal:"africa",sn:"africa",seychelles:"africa",sc:"africa","sierra leone":"africa",sl:"africa",somalia:"africa",so:"africa","south africa":"africa",za:"africa","south sudan":"africa",ss:"africa",sudan:"africa",sd:"africa",swaziland:"africa",sz:"africa",tanzania:"africa",tz:"africa",togo:"africa",tg:"africa",tunisia:"africa",tn:"africa",uganda:"africa",ug:"africa",zambia:"africa",zm:"africa",zimbabwe:"africa",zw:"africa",australia:"oceania",au:"oceania",fiji:"oceania",fj:"oceania",kiribati:"oceania",ki:"oceania","marshall islands":"oceania",mh:"oceania",micronesia:"oceania",fm:"oceania",nauru:"oceania",nr:"oceania","new zealand":"oceania",nz:"oceania",palau:"oceania",pw:"oceania","papua new guinea":"oceania",pg:"oceania",samoa:"oceania",ws:"oceania","solomon islands":"oceania",sb:"oceania",tonga:"oceania",to:"oceania",tuvalu:"oceania",tv:"oceania",vanuatu:"oceania",vu:"oceania"},U={EU:"europe",EUR:"europe",EUROPE:"europe",NA:"northamerica","NORTH AMERICA":"northamerica",NORTHAMERICA:"northamerica",SA:"southamerica","SOUTH AMERICA":"southamerica",SOUTHAMERICA:"southamerica",AS:"asia",ASIA:"asia",AF:"africa",AFRICA:"africa",OC:"oceania",OCEANIA:"oceania",AU:"oceania",AUSTRALIA:"oceania"},x={europe:{finland:"north",sweden:"north",norway:"north",denmark:"north",iceland:"north",estonia:"north",latvia:"north",lithuania:"north",poland:"central",germany:"central",netherlands:"west",belgium:"west",luxembourg:"west",france:"west",uk:"west",unitedkingdom:"west",ireland:"west",spain:"south",portugal:"south",italy:"south",greece:"south",malta:"south",cyprus:"south",switzerland:"central",austria:"central",czechrepublic:"central",czechia:"central",slovakia:"central",hungary:"central",slovenia:"central",croatia:"central",romania:"east",bulgaria:"east",ukraine:"east",belarus:"east",moldova:"east",russia:"east"},northamerica:{canada:"north",usa:"central",unitedstates:"central",us:"central",mexico:"south",guatemala:"central",belize:"central",elsalvador:"central",honduras:"central",nicaragua:"central",costarica:"central",panama:"central",cuba:"caribbean",jamaica:"caribbean",haiti:"caribbean",dominicanrepublic:"caribbean",bahamas:"caribbean",barbados:"caribbean",trinidadandtobago:"caribbean"},southamerica:{venezuela:"north",colombia:"north",guyana:"north",suriname:"north",brazil:"east",peru:"west",ecuador:"west",chile:"west",bolivia:"central",paraguay:"central",argentina:"south",uruguay:"south"},asia:{russia:"north",mongolia:"north",china:"east",japan:"east",southkorea:"east",korea:"east",northkorea:"east",taiwan:"east",india:"south",pakistan:"south",bangladesh:"south",srilanka:"south",nepal:"south",bhutan:"south",afghanistan:"south",iran:"west",iraq:"west",syria:"west",jordan:"west",lebanon:"west",israel:"west",saudiarabia:"west",yemen:"west",oman:"west",unitedarabemirates:"west",uae:"west",qatar:"west",bahrain:"west",kuwait:"west",turkey:"west",thailand:"southeast",vietnam:"southeast",cambodia:"southeast",laos:"southeast",myanmar:"southeast",malaysia:"southeast",singapore:"southeast",indonesia:"southeast",philippines:"southeast",brunei:"southeast",timorleste:"southeast",kazakhstan:"central",uzbekistan:"central",turkmenistan:"central",tajikistan:"central",kyrgyzstan:"central"},africa:{egypt:"north",libya:"north",tunisia:"north",algeria:"north",morocco:"north",mauritania:"west",mali:"west",niger:"west",nigeria:"west",senegal:"west",gambia:"west",guineabissau:"west",guinea:"west",sierraleone:"west",liberia:"west",ivorycoast:"west",burkinafaso:"west",ghana:"west",togo:"west",benin:"west",capeverde:"west",chad:"central",centralafricanrepublic:"central",cameroon:"central",equatorialguinea:"central",gabon:"central",congo:"central",democraticrepublicofthecongo:"central",sudan:"east",southsudan:"east",ethiopia:"east",eritrea:"east",djibouti:"east",somalia:"east",kenya:"east",uganda:"east",rwanda:"east",burundi:"east",tanzania:"east",malawi:"east",zambia:"south",zimbabwe:"south",mozambique:"south",botswana:"south",namibia:"south",southafrica:"south",lesotho:"south",swaziland:"south",madagascar:"south",mauritius:"south",seychelles:"south",comoros:"south"},oceania:{australia:"pacific",newzealand:"pacific",papuanewguinea:"melanesia",solomonislands:"melanesia",vanuatu:"melanesia",fiji:"melanesia",samoa:"polynesia",tonga:"polynesia",tuvalu:"polynesia",kiribati:"micronesia",marshallislands:"micronesia",micronesia:"micronesia",nauru:"micronesia",palau:"micronesia"}}});var q={};E(q,{LocationDetector:()=>T});var I,j,h,T,K=m(()=>{"use strict";I=w(require("axios")),j=w(require("os"));C();M();h=k("location-detector"),T=class r{static GEO_IP_SERVICES=["http://ip-api.com/json/","https://ipapi.co/json/","https://geolocation-db.com/json/"];static getStableWorkerId(){if(process.env.WORKER_ID)return process.env.WORKER_ID;let e=j.default.hostname(),a=e.split("").reduce((t,n)=>(t<<5)-t+n.charCodeAt(0),0);return`worker-${e}-${Math.abs(a).toString(36)}`}static CLOUD_METADATA_ENDPOINTS={aws:{url:"http://169.254.169.254/latest/meta-data/placement/availability-zone",timeout:500,parser:e=>r.parseAwsZone(e)},gcp:{url:"http://metadata.google.internal/computeMetadata/v1/instance/zone",headers:{"Metadata-Flavor":"Google"},timeout:500,parser:e=>r.parseGcpZone(e)},azure:{url:"http://169.254.169.254/metadata/instance/compute/location?api-version=2021-02-01",headers:{Metadata:"true"},timeout:500,parser:e=>r.parseAzureLocation(e)},digitalocean:{url:"http://169.254.169.254/metadata/v1/region",timeout:500,parser:e=>r.parseDigitalOceanRegion(e)},hetzner:{url:"http://169.254.169.254/hetzner/v1/metadata/region",timeout:500,parser:e=>r.parseHetznerRegion(e)}};static async detectLocation(){h.info("\u{1F50D} Starting automatic location detection...");let e=r.checkEnvironmentVariables();if(e)return h.info("\u2705 Location from environment variables",e),e;let a=await r.detectCloudProvider();if(a)return h.info("\u2705 Location from cloud provider metadata",a),a;let t=await r.detectViaGeoIP();if(t)return h.info("\u2705 Location from GeoIP",t),t;let n=r.getFallbackLocation();return h.warn("\u26A0\uFE0F Using fallback location",n),n}static checkEnvironmentVariables(){if(process.env.WORKER_LOCATION){let e=process.env.WORKER_LOCATION.split(".");if(e.length>=5)return{continent:e[0],region:e[1],country:e[2],city:e[3],workerId:e[4]}}return process.env.WORKER_CONTINENT&&process.env.WORKER_COUNTRY?{continent:process.env.WORKER_CONTINENT,region:process.env.WORKER_REGION||"unknown",country:process.env.WORKER_COUNTRY,city:process.env.WORKER_CITY||"unknown",workerId:r.getStableWorkerId()}:null}static async detectCloudProvider(){for(let[e,a]of Object.entries(r.CLOUD_METADATA_ENDPOINTS))try{let t=await I.default.get(a.url,{timeout:a.timeout,headers:a.headers||{},validateStatus:()=>!0});if(t.status===200&&t.data){let n=a.parser(t.data);if(n)return h.info(`Detected ${e} environment`),{...n,workerId:r.getStableWorkerId()}}}catch{}return null}static async detectViaGeoIP(){let e;try{e=(await I.default.get("https://api.ipify.org?format=text",{timeout:2e3})).data.trim(),h.info(`Public IP: ${e}`)}catch(a){return h.error("Failed to get public IP",a),null}for(let a of r.GEO_IP_SERVICES)try{let n=(await I.default.get(a+e,{timeout:3e3})).data;h.debug("GeoIP response:",n);let c=n.country||n.country_name||n.countryCode||"unknown",l=r.normalizeString(c),o=v[l]||v[c.toLowerCase()];if(!o){let Q=n.continent||n.continent_name||n.continentCode;o=r.mapContinent(Q)}o==="unknown"&&l!=="unknown"&&(o=v[l]||"unknown");let p=l,g=r.normalizeString(n.city||n.city_name||n.regionName||"unknown"),d=r.determineRegion(o,p);return{continent:o,region:d,country:p,city:g,workerId:r.getStableWorkerId()}}catch(t){h.debug(`GeoIP service ${a} failed`,t)}return null}static parseAwsZone(e){let a={"us-east-1":{continent:"northamerica",region:"east",country:"usa",city:"virginia"},"us-east-2":{continent:"northamerica",region:"east",country:"usa",city:"ohio"},"us-west-1":{continent:"northamerica",region:"west",country:"usa",city:"california"},"us-west-2":{continent:"northamerica",region:"west",country:"usa",city:"oregon"},"eu-west-1":{continent:"europe",region:"west",country:"ireland",city:"dublin"},"eu-west-2":{continent:"europe",region:"west",country:"uk",city:"london"},"eu-west-3":{continent:"europe",region:"west",country:"france",city:"paris"},"eu-central-1":{continent:"europe",region:"central",country:"germany",city:"frankfurt"},"eu-north-1":{continent:"europe",region:"north",country:"sweden",city:"stockholm"},"ap-southeast-1":{continent:"asia",region:"southeast",country:"singapore",city:"singapore"},"ap-southeast-2":{continent:"oceania",region:"australia",country:"australia",city:"sydney"},"ap-northeast-1":{continent:"asia",region:"east",country:"japan",city:"tokyo"},"ap-south-1":{continent:"asia",region:"south",country:"india",city:"mumbai"}},t=e.substring(0,e.lastIndexOf("-"));return a[t]||{}}static parseGcpZone(e){let a=e.split("/"),t=a[a.length-1],n=t.substring(0,t.lastIndexOf("-"));return{"us-central1":{continent:"northamerica",region:"central",country:"usa",city:"iowa"},"us-east1":{continent:"northamerica",region:"east",country:"usa",city:"southcarolina"},"us-east4":{continent:"northamerica",region:"east",country:"usa",city:"virginia"},"us-west1":{continent:"northamerica",region:"west",country:"usa",city:"oregon"},"europe-west1":{continent:"europe",region:"west",country:"belgium",city:"brussels"},"europe-west2":{continent:"europe",region:"west",country:"uk",city:"london"},"europe-west3":{continent:"europe",region:"west",country:"germany",city:"frankfurt"},"europe-west4":{continent:"europe",region:"west",country:"netherlands",city:"amsterdam"},"asia-east1":{continent:"asia",region:"east",country:"taiwan",city:"taipei"},"asia-northeast1":{continent:"asia",region:"east",country:"japan",city:"tokyo"},"asia-southeast1":{continent:"asia",region:"southeast",country:"singapore",city:"singapore"}}[n]||{}}static parseAzureLocation(e){return{eastus:{continent:"northamerica",region:"east",country:"usa",city:"virginia"},eastus2:{continent:"northamerica",region:"east",country:"usa",city:"virginia"},westus:{continent:"northamerica",region:"west",country:"usa",city:"california"},westus2:{continent:"northamerica",region:"west",country:"usa",city:"washington"},northeurope:{continent:"europe",region:"north",country:"ireland",city:"dublin"},westeurope:{continent:"europe",region:"west",country:"netherlands",city:"amsterdam"},uksouth:{continent:"europe",region:"west",country:"uk",city:"london"},francecentral:{continent:"europe",region:"west",country:"france",city:"paris"},germanywestcentral:{continent:"europe",region:"central",country:"germany",city:"frankfurt"},japaneast:{continent:"asia",region:"east",country:"japan",city:"tokyo"},southeastasia:{continent:"asia",region:"southeast",country:"singapore",city:"singapore"},australiaeast:{continent:"oceania",region:"australia",country:"australia",city:"sydney"}}[e.toLowerCase()]||{}}static parseDigitalOceanRegion(e){return{nyc1:{continent:"northamerica",region:"east",country:"usa",city:"newyork"},nyc3:{continent:"northamerica",region:"east",country:"usa",city:"newyork"},sfo1:{continent:"northamerica",region:"west",country:"usa",city:"sanfrancisco"},sfo2:{continent:"northamerica",region:"west",country:"usa",city:"sanfrancisco"},sfo3:{continent:"northamerica",region:"west",country:"usa",city:"sanfrancisco"},tor1:{continent:"northamerica",region:"east",country:"canada",city:"toronto"},lon1:{continent:"europe",region:"west",country:"uk",city:"london"},fra1:{continent:"europe",region:"central",country:"germany",city:"frankfurt"},ams3:{continent:"europe",region:"west",country:"netherlands",city:"amsterdam"},sgp1:{continent:"asia",region:"southeast",country:"singapore",city:"singapore"},blr1:{continent:"asia",region:"south",country:"india",city:"bangalore"},syd1:{continent:"oceania",region:"australia",country:"australia",city:"sydney"}}[e]||{}}static parseHetznerRegion(e){return{fsn1:{continent:"europe",region:"central",country:"germany",city:"falkenstein"},nbg1:{continent:"europe",region:"central",country:"germany",city:"nuremberg"},hel1:{continent:"europe",region:"north",country:"finland",city:"helsinki"},ash:{continent:"northamerica",region:"east",country:"usa",city:"ashburn"}}[e]||{}}static mapContinent(e){if(!e)return"unknown";let a=e.toUpperCase();return U[a]||"unknown"}static normalizeString(e){return e.toLowerCase().replace(/[^a-z0-9]/g,"").substring(0,20)}static determineRegion(e,a){return x[e]?.[a]||"general"}static getFallbackLocation(){return{continent:"europe",region:"unknown",country:"unknown",city:"unknown",workerId:r.getStableWorkerId()}}}});var ae=exports&&exports.__createBinding||(Object.create?function(r,e,a,t){t===void 0&&(t=a);var n=Object.getOwnPropertyDescriptor(e,a);(!n||("get"in n?!e.__esModule:n.writable||n.configurable))&&(n={enumerable:!0,get:function(){return e[a]}}),Object.defineProperty(r,t,n)}:function(r,e,a,t){t===void 0&&(t=a),r[t]=e[a]}),te=exports&&exports.__setModuleDefault||(Object.create?function(r,e){Object.defineProperty(r,"default",{enumerable:!0,value:e})}:function(r,e){r.default=e}),O=exports&&exports.__importStar||function(){var r=function(e){return r=Object.getOwnPropertyNames||function(a){var t=[];for(var n in a)Object.prototype.hasOwnProperty.call(a,n)&&(t[t.length]=n);return t},r(e)};return function(e){if(e&&e.__esModule)return e;var a={};if(e!=null)for(var t=r(e),n=0;n<t.length;n++)t[n]!=="default"&&ae(a,e,t[n]);return te(a,e),a}}();Object.defineProperty(exports,"__esModule",{value:!0});var re=(W(),R(G)),ne=(K(),R(q)),ie=(C(),R(D)),H=O(require("fs/promises")),oe=O(require("path")),se=O(require("os")),s=(0,ie.createLogger)("auto-worker"),A=process.env.API_ENDPOINT||"https://guardant.me",ce=process.env.OWNER_EMAIL||"admin@guardant.me",F=oe.join(se.homedir(),".guardant-worker-creds.json");async function ue(r,e){try{let a=await fetch(`${A}/api/worker/register`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({workerId:r,ownerEmail:ce,name:`Geographic Worker ${e.city}`,region:`${e.continent}.${e.region}`,location:e,capabilities:(process.env.WORKER_CAPABILITIES||"http,https,tcp,ping").split(","),version:process.env.WORKER_VERSION||"6.0.7"})});if(!a.ok)return s.error(`Registration failed: ${a.status} ${a.statusText}`),!1;let t=await a.json();return s.info("\u2705 Worker registered successfully",{workerId:t.workerId}),!0}catch(a){return s.error("Failed to register worker:",a),!1}}async function B(r){try{let e=await fetch(`${A}/api/worker/status/${r}`,{method:"GET",headers:{"Content-Type":"application/json"}});return e.ok?await e.json():null}catch(e){return s.error("Failed to check worker status:",e),null}}async function le(r,e){try{await H.writeFile(F,JSON.stringify({workerId:r,rabbitmqUrl:e},null,2)),s.info("\u{1F4BE} Credentials saved locally")}catch(a){s.warn("Could not save credentials locally:",a)}}async function ge(){try{let r=await H.readFile(F,"utf-8");return JSON.parse(r)}catch{return null}}async function he(r){for(s.info("\u23F3 Waiting for admin approval..."),s.info("\u{1F4CB} Please approve this worker in the admin panel at:"),s.info(`   ${A}/admin/workers`);;){let e=await B(r);if(e&&e.approved&&e.rabbitmqUrl)return s.info("\u2705 Worker approved by admin!"),e;s.debug("Still waiting for approval..."),await new Promise(a=>setTimeout(a,3e4))}}async function pe(){s.info("\u{1F680} Starting GuardAnt Geographic Worker with auto-location detection...");try{let r=await ne.LocationDetector.detectLocation();s.info("\u{1F4CD} Detected location:",{continent:r.continent,region:r.region,country:r.country,city:r.city,workerId:r.workerId});let e=`${r.continent}.${r.region}.${r.country}.${r.city}`;console.log(`
-\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557`),console.log(`\u2551 \u{1F30D} Worker Location: ${e.padEnd(33)} \u2551`),console.log(`\u2551 \u{1F194} Worker ID: ${r.workerId.padEnd(39)} \u2551`),console.log(`\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D
-`);let a=process.env.RABBITMQ_URL,t=await ge();if(t&&t.workerId===r.workerId){s.info("\u{1F4C2} Found saved credentials, checking if still valid...");let l=await B(r.workerId);l&&l.approved&&(s.info("\u2705 Using existing approved credentials"),a=t.rabbitmqUrl)}if(!a||a==="amqp://rabbitmq:5672"){if(s.info("\u{1F4DD} Registering worker..."),!await ue(r.workerId,r))throw new Error("Failed to register worker");let o=await he(r.workerId);a=o.rabbitmqUrl,await le(r.workerId,a),o.geographic&&(o.geographic.continent&&(r.continent=o.geographic.continent),o.geographic.region&&(r.region=o.geographic.region),o.geographic.country&&(r.country=o.geographic.country),o.geographic.city&&(r.city=o.geographic.city),s.info("\u{1F4CD} Location updated by admin:",r))}let n={workerId:r.workerId,location:r,rabbitmqUrl:a,capabilities:(process.env.WORKER_CAPABILITIES||"http,https,tcp,ping").split(","),version:process.env.WORKER_VERSION||"6.4.4"};s.info("\u{1F527} Worker configuration:",{workerId:n.workerId,location:`${r.continent}.${r.region}.${r.country}.${r.city}`,rabbitmqUrl:n.rabbitmqUrl.replace(/:[^:@]+@/,":****@"),capabilities:n.capabilities,version:n.version});let c=new re.GeographicWorker(n);await c.start(),s.info("\u2705 Worker started successfully"),process.on("SIGINT",async()=>{s.info("\u{1F6D1} Shutting down gracefully..."),await c.stop(),process.exit(0)}),process.on("SIGTERM",async()=>{s.info("\u{1F6D1} Shutting down gracefully..."),await c.stop(),process.exit(0)})}catch(r){s.error("\u274C Failed to start worker:",r),process.exit(1)}}pe().catch(r=>{console.error("Fatal error:",r),process.exit(1)});
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+const geographic_worker_1 = require("./geographic-worker");
+const location_detector_1 = require("./location-detector");
+const logger_1 = require("./logger");
+const fs = __importStar(require("fs/promises"));
+const path = __importStar(require("path"));
+const os = __importStar(require("os"));
+const logger = (0, logger_1.createLogger)('auto-worker');
+const API_ENDPOINT = process.env.API_ENDPOINT || 'https://guardant.me';
+const OWNER_EMAIL = process.env.OWNER_EMAIL || 'admin@guardant.me';
+const CREDENTIALS_FILE = path.join(os.homedir(), '.guardant-worker-creds.json');
+async function registerWorker(workerId, location) {
+    try {
+        const response = await fetch(`${API_ENDPOINT}/api/worker/register`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                workerId,
+                ownerEmail: OWNER_EMAIL,
+                name: `Geographic Worker ${location.city}`,
+                region: `${location.continent}.${location.region}`,
+                location: location,
+                capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
+                version: process.env.WORKER_VERSION || '6.0.7'
+            })
+        });
+        if (!response.ok) {
+            logger.error(`Registration failed: ${response.status} ${response.statusText}`);
+            return false;
+        }
+        const result = await response.json();
+        logger.info('✅ Worker registered successfully', { workerId: result.workerId });
+        return true;
+    }
+    catch (error) {
+        logger.error('Failed to register worker:', error);
+        return false;
+    }
+}
+async function checkWorkerStatus(workerId) {
+    try {
+        const response = await fetch(`${API_ENDPOINT}/api/worker/status/${workerId}`, {
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!response.ok) {
+            return null;
+        }
+        const status = await response.json();
+        return status;
+    }
+    catch (error) {
+        logger.error('Failed to check worker status:', error);
+        return null;
+    }
+}
+async function saveCredentials(workerId, rabbitmqUrl) {
+    try {
+        await fs.writeFile(CREDENTIALS_FILE, JSON.stringify({ workerId, rabbitmqUrl }, null, 2));
+        logger.info('💾 Credentials saved locally');
+    }
+    catch (error) {
+        logger.warn('Could not save credentials locally:', error);
+    }
+}
+async function loadCredentials() {
+    try {
+        const data = await fs.readFile(CREDENTIALS_FILE, 'utf-8');
+        return JSON.parse(data);
+    }
+    catch {
+        return null;
+    }
+}
+async function waitForApproval(workerId) {
+    logger.info('⏳ Waiting for admin approval...');
+    logger.info('📋 Please approve this worker in the admin panel at:');
+    logger.info(`   ${API_ENDPOINT}/admin/workers`);
+    while (true) {
+        const status = await checkWorkerStatus(workerId);
+        if (status && status.approved && status.rabbitmqUrl) {
+            logger.info('✅ Worker approved by admin!');
+            return status;
+        }
+        logger.debug('Still waiting for approval...');
+        await new Promise(resolve => setTimeout(resolve, 30000)); // Check every 30 seconds
+    }
+}
+async function startAutoWorker() {
+    logger.info('🚀 Starting GuardAnt Geographic Worker with auto-location detection...');
+    try {
+        // Automatycznie wykryj lokalizację
+        const location = await location_detector_1.LocationDetector.detectLocation();
+        logger.info('📍 Detected location:', {
+            continent: location.continent,
+            region: location.region,
+            country: location.country,
+            city: location.city,
+            workerId: location.workerId
+        });
+        // Pokaż ładnie sformatowaną lokalizację
+        const locationString = `${location.continent}.${location.region}.${location.country}.${location.city}`;
+        console.log(`\n╔═══════════════════════════════════════════════════════╗`);
+        console.log(`║ 🌍 Worker Location: ${locationString.padEnd(33)} ║`);
+        console.log(`║ 🆔 Worker ID: ${location.workerId.padEnd(39)} ║`);
+        console.log(`╚═══════════════════════════════════════════════════════╝\n`);
+        let rabbitmqUrl = process.env.RABBITMQ_URL;
+        // Check if we have saved credentials
+        const savedCreds = await loadCredentials();
+        if (savedCreds && savedCreds.workerId === location.workerId) {
+            logger.info('📂 Found saved credentials, checking if still valid...');
+            const status = await checkWorkerStatus(location.workerId);
+            if (status && status.approved) {
+                logger.info('✅ Using existing approved credentials');
+                rabbitmqUrl = savedCreds.rabbitmqUrl;
+            }
+        }
+        // If no valid credentials, register and wait for approval
+        if (!rabbitmqUrl || rabbitmqUrl === 'amqp://rabbitmq:5672') {
+            logger.info('📝 Registering worker...');
+            // Register the worker
+            const registered = await registerWorker(location.workerId, location);
+            if (!registered) {
+                throw new Error('Failed to register worker');
+            }
+            // Wait for approval
+            const approval = await waitForApproval(location.workerId);
+            // Save credentials
+            rabbitmqUrl = approval.rabbitmqUrl;
+            await saveCredentials(location.workerId, rabbitmqUrl);
+            // Update location if provided by admin
+            if (approval.geographic) {
+                if (approval.geographic.continent)
+                    location.continent = approval.geographic.continent;
+                if (approval.geographic.region)
+                    location.region = approval.geographic.region;
+                if (approval.geographic.country)
+                    location.country = approval.geographic.country;
+                if (approval.geographic.city)
+                    location.city = approval.geographic.city;
+                logger.info('📍 Location updated by admin:', location);
+            }
+        }
+        // Konfiguracja workera
+        const config = {
+            workerId: location.workerId,
+            location: location,
+            rabbitmqUrl: rabbitmqUrl,
+            capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
+            version: process.env.WORKER_VERSION || '6.4.4'
+        };
+        logger.info('🔧 Worker configuration:', {
+            workerId: config.workerId,
+            location: `${location.continent}.${location.region}.${location.country}.${location.city}`,
+            rabbitmqUrl: config.rabbitmqUrl.replace(/:[^:@]+@/, ':****@'),
+            capabilities: config.capabilities,
+            version: config.version
+        });
+        // Uruchom workera
+        const worker = new geographic_worker_1.GeographicWorker(config);
+        await worker.start();
+        logger.info('✅ Worker started successfully');
+        // Obsługa zamknięcia
+        process.on('SIGINT', async () => {
+            logger.info('🛑 Shutting down gracefully...');
+            await worker.stop();
+            process.exit(0);
+        });
+        process.on('SIGTERM', async () => {
+            logger.info('🛑 Shutting down gracefully...');
+            await worker.stop();
+            process.exit(0);
+        });
+    }
+    catch (error) {
+        logger.error('❌ Failed to start worker:', error);
+        process.exit(1);
+    }
+}
+// Start worker
+startAutoWorker().catch((error) => {
+    console.error('Fatal error:', error);
+    process.exit(1);
+});
+//# sourceMappingURL=auto-geographic-worker.js.map
