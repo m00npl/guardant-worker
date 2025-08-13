@@ -11,6 +11,7 @@ import {
   EXCHANGES,
   QUEUE_PREFIXES
 } from './geographic-hierarchy';
+import { setupGeoFairConsumer } from './utils/geo-fair-consumer';
 
 const logger = createLogger('geographic-worker');
 
@@ -230,6 +231,36 @@ export class GeographicWorker {
     const claimQueue = `${QUEUE_PREFIXES.WORKER_CLAIMS}${this.config.workerId}`;
     await this.channel.assertQueue(claimQueue, { durable: true });
     await this.channel.bindQueue(claimQueue, EXCHANGES.CLAIMS, `response.${this.config.workerId}`);
+    
+    // Setup geo-fair consumer for regional and global queues
+    try {
+      const geoFairResult = await setupGeoFairConsumer(
+        this.channel,
+        this.config.workerId,
+        this.config.location,
+        async (task) => {
+          // Process task received from geo-fair queues
+          logger.info(`📥 [GEO-FAIR] Received check task ${task.id}`, {
+            serviceId: task.serviceId,
+            target: task.target,
+            targetRegion: task.targetRegion
+          });
+          
+          // Claim and execute the task
+          const claimed = await this.claimTask(task);
+          if (!claimed) {
+            logger.warn(`Task ${task.id} claimed by another worker`);
+            return;
+          }
+          
+          await this.executeCheck(task);
+        }
+      );
+      
+      logger.info(`🌍 Geo-fair setup complete for region: ${geoFairResult.region}`);
+    } catch (error) {
+      logger.warn('Geo-fair queues not available, using standard routing only', error);
+    }
     
     logger.info(`✅ Queues and bindings configured`);
   }

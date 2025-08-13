@@ -1,6 +1,6 @@
 // src/update-manager.ts
 class UpdateManager {
-  currentVersion = "6.4.0";
+  currentVersion = "6.5.1";
   getCurrentVersion() {
     return this.currentVersion;
   }
