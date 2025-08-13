@@ -300,7 +300,7 @@ export class GeographicWorker {
         resolve(false); // Don't proceed on timeout - scheduler didn't approve
       }, this.CLAIM_TIMEOUT);
       
-      const consumer = this.channel!.consume(claimQueue, (msg) => {
+      this.channel!.consume(claimQueue, async (msg) => {
         if (!msg) return;
         
         try {
@@ -309,12 +309,21 @@ export class GeographicWorker {
           if (response.taskId === task.id) {
             clearTimeout(timeout);
             this.channel!.ack(msg);
-            this.channel!.cancel(consumer.consumerTag);
+            // Consumer will be cancelled automatically when channel closes
+            // or we can store consumerTag from the promise result
             resolve(response.approved);
           }
         } catch (error) {
           logger.error('Failed to parse claim response', error);
         }
+      }).then(({ consumerTag }) => {
+        // Store consumerTag for later cancellation if needed
+        setTimeout(() => {
+          // Cancel consumer after timeout to clean up
+          if (this.channel && consumerTag) {
+            this.channel.cancel(consumerTag).catch(() => {});
+          }
+        }, this.CLAIM_TIMEOUT + 1000);
       });
     });
   }
