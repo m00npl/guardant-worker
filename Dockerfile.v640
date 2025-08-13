@@ -1,0 +1,52 @@
+# GuardAnt Worker v6.4.0 - Fixed version
+FROM node:20-alpine
+
+# Install required tools
+RUN apk add --no-cache \
+    curl \
+    wget \
+    bash \
+    tini
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Remove problematic dependencies and install
+RUN npm install --production --no-optional && \
+    npm remove pino pino-pretty thread-stream 2>/dev/null || true && \
+    npm cache clean --force
+
+# Copy pre-built dist files
+COPY dist/auto-geographic-worker.js ./dist/
+COPY dist/geographic-worker.js ./dist/
+
+# Fix permissions
+RUN chmod +x dist/auto-geographic-worker.js
+
+# Create non-root user
+RUN addgroup -g 1001 -S worker && \
+    adduser -u 1001 -S worker -G worker && \
+    chown -R worker:worker /app
+
+# Switch to non-root user  
+USER worker
+
+# Environment variables
+ENV NODE_ENV=production \
+    API_ENDPOINT="https://guardant.me" \
+    WORKER_REGION="auto" \
+    MAX_CONCURRENT="10" \
+    LOG_LEVEL="info"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD node -e "process.exit(0)" || exit 1
+
+# Use tini as entrypoint
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Start the worker (CommonJS format)
+CMD ["node", "--no-warnings", "dist/auto-geographic-worker.js"]

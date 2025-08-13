@@ -1,0 +1,49 @@
+# GuardAnt Worker Multi-Architecture Docker Image
+FROM node:20-alpine
+
+# Install required tools
+RUN apk add --no-cache \
+    curl \
+    wget \
+    bash \
+    tini
+
+# Create app directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install production dependencies only
+RUN npm ci --only=production || npm install --production
+
+# Copy pre-built dist files
+COPY dist/ ./dist/
+
+# Clean up
+RUN npm cache clean --force
+
+# Create non-root user
+RUN addgroup -g 1001 -S worker && \
+    adduser -u 1001 -S worker -G worker && \
+    chown -R worker:worker /app
+
+# Switch to non-root user  
+USER worker
+
+# Environment variables
+ENV NODE_ENV=production \
+    API_ENDPOINT="https://guardant.me" \
+    WORKER_REGION="auto" \
+    MAX_CONCURRENT="10" \
+    LOG_LEVEL="info"
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD node -e "process.exit(0)" || exit 1
+
+# Use tini as entrypoint
+ENTRYPOINT ["/sbin/tini", "--"]
+
+# Start the worker
+CMD ["node", "dist/auto-geographic-worker.js"]

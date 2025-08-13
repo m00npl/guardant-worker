@@ -1,6 +1,6 @@
 import amqp, { Channel, Connection, ConsumeMessage } from 'amqplib';
 import axios from 'axios';
-import { createLogger } from './logger';
+import { createLogger } from './simple-logger';
 import {
   WorkerRegistration,
   GeographicLocation,
@@ -30,6 +30,8 @@ export class GeographicWorker {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private cachedIP: string | null = null;
   private cachedIPTime: number = 0;
+  private checksCompleted: number = 0;
+  private totalPoints: number = 0;
   private readonly HEARTBEAT_INTERVAL = 30000; // 30 seconds
   private readonly CHECK_TIMEOUT = 30000; // 30 seconds
   private readonly CLAIM_TIMEOUT = 2000; // 2 seconds
@@ -410,7 +412,7 @@ export class GeographicWorker {
           uptime: Date.now() - this.registration.registeredAt,
           // Required fields for HeartbeatVerifier
           region: this.config.location.region || 'unknown',
-          version: this.config.version || '6.1.0',
+          version: this.config.version || '6.4.4',
           checksCompleted: 0, // TODO: track actual checks completed
           totalPoints: 0, // TODO: track actual points
           currentPeriodPoints: 0,

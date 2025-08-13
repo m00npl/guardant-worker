@@ -312,7 +312,7 @@ class GeographicWorker {
                     uptime: Date.now() - this.registration.registeredAt,
                     // Required fields for HeartbeatVerifier
                     region: this.config.location.region || 'unknown',
-                    version: this.config.version || '6.1.0',
+                    version: this.config.version || '6.4.4',
                     checksCompleted: 0, // TODO: track actual checks completed
                     totalPoints: 0, // TODO: track actual points
                     currentPeriodPoints: 0,

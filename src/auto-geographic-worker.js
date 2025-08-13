@@ -182,7 +182,7 @@ async function startAutoWorker() {
             location: location,
             rabbitmqUrl: rabbitmqUrl,
             capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
-            version: process.env.WORKER_VERSION || '6.1.3'
+            version: process.env.WORKER_VERSION || '6.4.4'
         };
         logger.info('🔧 Worker configuration:', {
             workerId: config.workerId,

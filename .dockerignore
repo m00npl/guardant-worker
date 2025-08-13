@@ -7,7 +7,7 @@ npm-debug.log
 .idea
 .DS_Store
 *.md
-dist
+# dist - needed for Docker build
 binaries
 coverage
 .env

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { GeographicWorker, WorkerConfig } from './geographic-worker';
 import { LocationDetector } from './location-detector';
-import { createLogger } from './logger';
+import { createLogger } from './simple-logger';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -188,7 +188,7 @@ async function startAutoWorker() {
       location: location,
       rabbitmqUrl: rabbitmqUrl!,
       capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
-      version: process.env.WORKER_VERSION || '6.1.3'
+      version: process.env.WORKER_VERSION || '6.4.4'
     };
     
     logger.info('🔧 Worker configuration:', {
