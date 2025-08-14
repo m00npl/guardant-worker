@@ -1,4 +1,4 @@
-// Geo-fair consumer setup for workers
+// Geo-fair consumer setup for workers with Falkenstein throttling
 import { Channel } from 'amqplib';
 import { createLogger } from '../simple-logger';
 
@@ -77,10 +77,21 @@ export function getWorkerRegion(location: {
 }
 
 /**
- * Setup geo-fair consumer for a worker
- * Subscribes to:
- * 1. Regional queue with high priority (for tasks in worker's region)
- * 2. Global fallback queue with low priority (for any unclaimed tasks)
+ * Check if worker is in Falkenstein (needs throttling)
+ */
+export function isFalkensteinWorker(location: {
+  city?: string;
+  country?: string;
+}): boolean {
+  const city = (location.city || '').toLowerCase();
+  const country = (location.country || '').toLowerCase();
+  
+  return city.includes('falkenstein') || 
+         (country.includes('germany') && city.includes('falk'));
+}
+
+/**
+ * Setup geo-fair consumer for a worker with Falkenstein throttling
  * 
  * @param channel RabbitMQ channel
  * @param workerId Worker ID
@@ -94,13 +105,16 @@ export async function setupGeoFairConsumer(
   onMessage: (msg: any) => Promise<void>
 ) {
   const workerRegion = getWorkerRegion(location);
+  const isFalkenstein = isFalkensteinWorker(location);
   
   logger.info(`🌍 Setting up geo-fair consumer for region: ${workerRegion}`, {
     workerId,
-    location
+    location,
+    isFalkenstein
   });
   
   // Set prefetch to 1 for fair distribution
+  // Falkenstein gets even lower prefetch for global queue
   await channel.prefetch(1);
   
   // 1. Subscribe to regional queue (high priority)
@@ -136,44 +150,98 @@ export async function setupGeoFairConsumer(
     logger.warn(`Regional queue ${regionalQueue} not available:`, error);
   }
   
-  // 2. Subscribe to global fallback queue (low priority)
+  // 2. Subscribe to global fallback queue
+  // Falkenstein gets LOWEST priority to prevent monopolization
   const globalQueue = 'tasks.global.ready';
+  const globalPriority = isFalkenstein ? 0 : 5; // Falkenstein gets 0, others get 5
+  
   try {
     // Check if queue exists
     await channel.checkQueue(globalQueue);
     
-    // Consume with low priority
-    await channel.consume(globalQueue, async (msg) => {
-      if (!msg) return;
+    // Add rate limiting for Falkenstein workers
+    if (isFalkenstein) {
+      logger.warn(`⚠️ Falkenstein worker detected - applying throttling`);
       
-      logger.info(`📥 [GLOBAL] Received task from global fallback queue`, {
-        size: msg.content.length,
-        headers: msg.properties.headers
+      // Track tasks processed to implement cooldown
+      let tasksProcessed = 0;
+      const MAX_TASKS_BEFORE_COOLDOWN = 5;
+      const COOLDOWN_MS = 10000; // 10 second cooldown after 5 tasks
+      
+      await channel.consume(globalQueue, async (msg) => {
+        if (!msg) return;
+        
+        // Check if we need cooldown
+        if (tasksProcessed >= MAX_TASKS_BEFORE_COOLDOWN) {
+          logger.info(`🛑 Falkenstein cooldown - processed ${tasksProcessed} tasks, waiting ${COOLDOWN_MS}ms`);
+          channel.nack(msg, false, true); // Requeue the message
+          
+          // Wait for cooldown
+          await new Promise(resolve => setTimeout(resolve, COOLDOWN_MS));
+          tasksProcessed = 0; // Reset counter
+          return;
+        }
+        
+        logger.info(`📥 [GLOBAL-THROTTLED] Falkenstein received task (${tasksProcessed + 1}/${MAX_TASKS_BEFORE_COOLDOWN})`, {
+          size: msg.content.length,
+          headers: msg.properties.headers
+        });
+        
+        try {
+          const task = JSON.parse(msg.content.toString());
+          await onMessage(task);
+          channel.ack(msg);
+          tasksProcessed++;
+        } catch (error) {
+          logger.error(`[GLOBAL-THROTTLED] Failed to process task`, error);
+          channel.nack(msg, false, true); // Requeue
+        }
+      }, {
+        consumerTag: `${workerId}-global-throttled`,
+        priority: globalPriority // Lowest priority for Falkenstein
       });
       
-      try {
-        const task = JSON.parse(msg.content.toString());
-        await onMessage(task);
-        channel.ack(msg);
-      } catch (error) {
-        logger.error(`[GLOBAL] Failed to process task`, error);
-        channel.nack(msg, false, true); // Requeue
-      }
-    }, {
-      consumerTag: `${workerId}-global`,
-      priority: 1 // Low priority for global tasks
-    });
-    
-    logger.info(`✅ Subscribed to global fallback queue: ${globalQueue}`);
+      logger.info(`⚠️ Subscribed to global queue with THROTTLING (priority ${globalPriority})`);
+    } else {
+      // Normal consumption for non-Falkenstein workers
+      await channel.consume(globalQueue, async (msg) => {
+        if (!msg) return;
+        
+        logger.info(`📥 [GLOBAL] Received task from global fallback queue`, {
+          size: msg.content.length,
+          headers: msg.properties.headers
+        });
+        
+        try {
+          const task = JSON.parse(msg.content.toString());
+          await onMessage(task);
+          channel.ack(msg);
+        } catch (error) {
+          logger.error(`[GLOBAL] Failed to process task`, error);
+          channel.nack(msg, false, true); // Requeue
+        }
+      }, {
+        consumerTag: `${workerId}-global`,
+        priority: globalPriority // Normal priority for non-Falkenstein
+      });
+      
+      logger.info(`✅ Subscribed to global fallback queue with priority ${globalPriority}`);
+    }
   } catch (error) {
     logger.warn(`Global queue ${globalQueue} not available:`, error);
   }
   
-  logger.info(`🎯 Geo-fair consumer setup complete for ${workerRegion} region`);
+  logger.info(`🎯 Geo-fair consumer setup complete`, {
+    region: workerRegion,
+    isFalkenstein,
+    globalPriority
+  });
   
   return {
     region: workerRegion,
     regionalQueue,
-    globalQueue
+    globalQueue,
+    isFalkenstein,
+    throttled: isFalkenstein
   };
 }
