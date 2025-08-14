@@ -25,6 +25,8 @@ export function getWorkerRegion(location: {
       country.includes('sweden') || country.includes('norway') || country.includes('denmark') ||
       country.includes('belgium') || country.includes('switzerland') || country.includes('austria') ||
       country.includes('czech') || city.includes('falkenstein') || city.includes('warsaw') ||
+      city.includes('warszawa') || city.includes('krakow') || city.includes('kraków') ||
+      city.includes('poznan') || city.includes('poznań') || city.includes('gdansk') || city.includes('gdańsk') ||
       city.includes('helsinki') || city.includes('frankfurt') || city.includes('berlin') ||
       city.includes('paris') || city.includes('london') || city.includes('amsterdam')) {
     return 'eu';
