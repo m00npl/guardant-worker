@@ -44,6 +44,7 @@ USER worker
 ENV NODE_ENV=production \
     API_ENDPOINT="https://guardant.me" \
     WORKER_REGION="auto" \
+    WORKER_VERSION="6.4.5" \
     MAX_CONCURRENT="10" \
     LOG_LEVEL="info"
 

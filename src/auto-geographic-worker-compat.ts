@@ -70,16 +70,14 @@ async function startAutoWorker() {
     const config: WorkerConfig = {
       workerId: workerId,
       location: location,
-      redisUrl: redisUrl,
       rabbitmqUrl: rabbitmqUrl,
       capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
-      version: process.env.WORKER_VERSION || '6.0.8'
+      version: process.env.WORKER_VERSION || '6.4.5'
     };
     
     logger.info('🔧 Worker configuration:', {
       workerId: config.workerId,
       location: `${location.continent}.${location.region}.${location.country}.${location.city}`,
-      redisUrl: config.redisUrl.replace(/:[^:@]+@/, ':****@'),
       rabbitmqUrl: config.rabbitmqUrl.replace(/:[^:@]+@/, ':****@'),
       capabilities: config.capabilities,
       version: config.version

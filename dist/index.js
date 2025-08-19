@@ -41,11 +41,9 @@ const socket_io_client_1 = require("socket.io-client");
 const si = __importStar(require("systeminformation"));
 const p_queue_1 = __importDefault(require("p-queue"));
 const pino_1 = __importDefault(require("pino"));
-const crypto_1 = require("crypto");
 const os_1 = require("os");
-// Load environment variables
+const worker_id_generator_1 = require("./worker-id-generator");
 (0, dotenv_1.config)();
-// Logger setup - use pino-pretty only in development
 const logger = process.env.NODE_ENV === 'development'
     ? (0, pino_1.default)({
         level: process.env.LOG_LEVEL || 'info',
@@ -67,12 +65,14 @@ const logger = process.env.NODE_ENV === 'development'
         timestamp: () => `,"time":"${new Date().toISOString()}"`
     });
 class GuardAntWorker {
+    config;
+    socket = null;
+    queue;
+    isRunning = false;
+    systemInfo = {};
+    checkCount = 0;
+    startTime = Date.now();
     constructor() {
-        this.socket = null;
-        this.isRunning = false;
-        this.systemInfo = {};
-        this.checkCount = 0;
-        this.startTime = Date.now();
         this.config = this.loadConfig();
         this.queue = new p_queue_1.default({
             concurrency: this.config.maxConcurrent,
@@ -86,7 +86,7 @@ class GuardAntWorker {
         });
     }
     loadConfig() {
-        const workerId = process.env.WORKER_ID || this.generateWorkerId();
+        const workerId = process.env.WORKER_ID || (0, worker_id_generator_1.generateUniqueWorkerIdSync)();
         const workerToken = process.env.WORKER_TOKEN || '';
         if (!workerToken) {
             logger.error('WORKER_TOKEN is required');
@@ -103,26 +103,15 @@ class GuardAntWorker {
             reportInterval: parseInt(process.env.REPORT_INTERVAL || '300000')
         };
     }
-    generateWorkerId() {
-        const hash = (0, crypto_1.createHash)('sha256');
-        hash.update((0, os_1.hostname)() + Date.now().toString());
-        return `worker_${hash.digest('hex').substring(0, 12)}`;
-    }
     async start() {
         logger.info('Starting GuardAnt Worker...');
         try {
-            // Collect system information
             await this.collectSystemInfo();
-            // Register with API
             await this.register();
-            // Connect WebSocket
             await this.connectWebSocket();
-            // Start monitoring loop
             this.isRunning = true;
             this.startMonitoringLoop();
-            // Start reporting loop
             this.startReportingLoop();
-            // Handle graceful shutdown
             this.setupShutdownHandlers();
             logger.info('Worker started successfully');
         }
@@ -186,7 +175,6 @@ class GuardAntWorker {
             const data = await response.json();
             if (data.success) {
                 logger.info('Worker registered successfully');
-                // Update region if auto-detected
                 if (this.config.region === 'auto' && data.detectedRegion) {
                     this.config.region = data.detectedRegion;
                     logger.info(`Region auto-detected: ${this.config.region}`);
@@ -315,7 +303,6 @@ class GuardAntWorker {
         }
     }
     async performTcpCheck(check, startTime) {
-        // TCP check implementation
         const net = require('net');
         const url = new URL(check.target);
         const port = parseInt(url.port || '80');
@@ -365,11 +352,10 @@ class GuardAntWorker {
         });
     }
     async performPingCheck(check, startTime) {
-        // Simple TCP-based ping since ICMP requires root privileges
         const net = require('net');
         const url = new URL(check.target);
         const host = url.hostname;
-        const port = 80; // Default to HTTP port for ping check
+        const port = 80;
         return new Promise((resolve) => {
             const socket = new net.Socket();
             socket.setTimeout(check.timeout);
@@ -443,11 +429,9 @@ class GuardAntWorker {
         }
     }
     reportCheckResult(result) {
-        // Report via WebSocket if connected
         if (this.socket?.connected) {
             this.socket.emit('check:result', result);
         }
-        // Also report via HTTP as fallback
         fetch(`${this.config.apiEndpoint}/api/worker/report`, {
             method: 'POST',
             headers: {
@@ -469,7 +453,6 @@ class GuardAntWorker {
             if (!this.isRunning)
                 return;
             try {
-                // Fetch checks to perform
                 const params = new URLSearchParams({
                     workerId: this.config.workerId,
                     region: this.config.region
@@ -505,11 +488,9 @@ class GuardAntWorker {
                 queuePending: this.queue.pending,
                 systemInfo: await this.getCurrentSystemStats()
             };
-            // Report stats via WebSocket
             if (this.socket?.connected) {
                 this.socket.emit('worker:stats', stats);
             }
-            // Also report via HTTP
             fetch(`${this.config.apiEndpoint}/api/worker/stats`, {
                 method: 'POST',
                 headers: {
@@ -566,14 +547,11 @@ class GuardAntWorker {
     async stop() {
         logger.info('Stopping worker...');
         this.isRunning = false;
-        // Clear queue
         this.queue.clear();
         await this.queue.onIdle();
-        // Disconnect WebSocket
         if (this.socket) {
             this.socket.disconnect();
         }
-        // Notify API
         try {
             await fetch(`${this.config.apiEndpoint}/api/worker/unregister`, {
                 method: 'POST',
@@ -590,7 +568,6 @@ class GuardAntWorker {
         logger.info('Worker stopped');
     }
 }
-// ASCII Art Banner
 function printBanner() {
     console.log(`
 ╔════════════════════════════════════════════╗
@@ -601,9 +578,7 @@ function printBanner() {
 ╚════════════════════════════════════════════╝
   `);
 }
-// Main execution
 async function main() {
-    // Handle CLI arguments
     const args = process.argv.slice(2);
     if (args.includes('--version') || args.includes('-v')) {
         console.log('GuardAnt Worker v1.0.0');
@@ -640,11 +615,9 @@ Example:
     const worker = new GuardAntWorker();
     await worker.start();
 }
-// Start worker
 if (require.main === module) {
     main().catch(error => {
         console.error('Fatal error:', error.message);
         process.exit(1);
     });
 }
-//# sourceMappingURL=index.js.map

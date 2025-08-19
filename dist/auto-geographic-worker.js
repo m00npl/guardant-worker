@@ -36,11 +36,11 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 const geographic_worker_1 = require("./geographic-worker");
 const location_detector_1 = require("./location-detector");
-const logger_1 = require("./logger");
+const simple_logger_1 = require("./simple-logger");
 const fs = __importStar(require("fs/promises"));
 const path = __importStar(require("path"));
 const os = __importStar(require("os"));
-const logger = (0, logger_1.createLogger)('auto-worker');
+const logger = (0, simple_logger_1.createLogger)('auto-worker');
 const API_ENDPOINT = process.env.API_ENDPOINT || 'https://guardant.me';
 const OWNER_EMAIL = process.env.OWNER_EMAIL || 'admin@guardant.me';
 const CREDENTIALS_FILE = path.join(os.homedir(), '.guardant-worker-creds.json');
@@ -56,7 +56,7 @@ async function registerWorker(workerId, location) {
                 region: `${location.continent}.${location.region}`,
                 location: location,
                 capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
-                version: process.env.WORKER_VERSION || '6.0.7'
+                version: process.env.WORKER_VERSION || '6.4.5'
             })
         });
         if (!response.ok) {
@@ -118,13 +118,12 @@ async function waitForApproval(workerId) {
             return status;
         }
         logger.debug('Still waiting for approval...');
-        await new Promise(resolve => setTimeout(resolve, 30000)); // Check every 30 seconds
+        await new Promise(resolve => setTimeout(resolve, 30000));
     }
 }
 async function startAutoWorker() {
     logger.info('🚀 Starting GuardAnt Geographic Worker with auto-location detection...');
     try {
-        // Automatycznie wykryj lokalizację
         const location = await location_detector_1.LocationDetector.detectLocation();
         logger.info('📍 Detected location:', {
             continent: location.continent,
@@ -133,14 +132,12 @@ async function startAutoWorker() {
             city: location.city,
             workerId: location.workerId
         });
-        // Pokaż ładnie sformatowaną lokalizację
         const locationString = `${location.continent}.${location.region}.${location.country}.${location.city}`;
         console.log(`\n╔═══════════════════════════════════════════════════════╗`);
         console.log(`║ 🌍 Worker Location: ${locationString.padEnd(33)} ║`);
         console.log(`║ 🆔 Worker ID: ${location.workerId.padEnd(39)} ║`);
         console.log(`╚═══════════════════════════════════════════════════════╝\n`);
         let rabbitmqUrl = process.env.RABBITMQ_URL;
-        // Check if we have saved credentials
         const savedCreds = await loadCredentials();
         if (savedCreds && savedCreds.workerId === location.workerId) {
             logger.info('📂 Found saved credentials, checking if still valid...');
@@ -150,20 +147,15 @@ async function startAutoWorker() {
                 rabbitmqUrl = savedCreds.rabbitmqUrl;
             }
         }
-        // If no valid credentials, register and wait for approval
         if (!rabbitmqUrl || rabbitmqUrl === 'amqp://rabbitmq:5672') {
             logger.info('📝 Registering worker...');
-            // Register the worker
             const registered = await registerWorker(location.workerId, location);
             if (!registered) {
                 throw new Error('Failed to register worker');
             }
-            // Wait for approval
             const approval = await waitForApproval(location.workerId);
-            // Save credentials
             rabbitmqUrl = approval.rabbitmqUrl;
             await saveCredentials(location.workerId, rabbitmqUrl);
-            // Update location if provided by admin
             if (approval.geographic) {
                 if (approval.geographic.continent)
                     location.continent = approval.geographic.continent;
@@ -176,13 +168,12 @@ async function startAutoWorker() {
                 logger.info('📍 Location updated by admin:', location);
             }
         }
-        // Konfiguracja workera
         const config = {
             workerId: location.workerId,
             location: location,
             rabbitmqUrl: rabbitmqUrl,
             capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
-            version: process.env.WORKER_VERSION || '6.4.4'
+            version: process.env.WORKER_VERSION || '6.4.5'
         };
         logger.info('🔧 Worker configuration:', {
             workerId: config.workerId,
@@ -191,11 +182,9 @@ async function startAutoWorker() {
             capabilities: config.capabilities,
             version: config.version
         });
-        // Uruchom workera
         const worker = new geographic_worker_1.GeographicWorker(config);
         await worker.start();
         logger.info('✅ Worker started successfully');
-        // Obsługa zamknięcia
         process.on('SIGINT', async () => {
             logger.info('🛑 Shutting down gracefully...');
             await worker.stop();
@@ -212,9 +201,7 @@ async function startAutoWorker() {
         process.exit(1);
     }
 }
-// Start worker
 startAutoWorker().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);
 });
-//# sourceMappingURL=auto-geographic-worker.js.map

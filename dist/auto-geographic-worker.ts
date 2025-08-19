@@ -42,7 +42,7 @@ async function registerWorker(workerId: string, location: any): Promise<boolean>
         region: `${location.continent}.${location.region}`,
         location: location,
         capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
-        version: process.env.WORKER_VERSION || '6.0.7'
+        version: process.env.WORKER_VERSION || '6.4.5'
       })
     });
 
@@ -188,7 +188,7 @@ async function startAutoWorker() {
       location: location,
       rabbitmqUrl: rabbitmqUrl!,
       capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
-      version: process.env.WORKER_VERSION || '6.4.4'
+      version: process.env.WORKER_VERSION || '6.4.5'
     };
     
     logger.info('🔧 Worker configuration:', {

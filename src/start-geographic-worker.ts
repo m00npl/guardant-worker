@@ -35,7 +35,6 @@ if (locationString) {
 const config: WorkerConfig = {
   workerId,
   location,
-  redisUrl: process.env.REDIS_URL || 'redis://localhost:6379',
   rabbitmqUrl: process.env.RABBITMQ_URL || 'amqp://localhost:5672',
   capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp').split(','),
   version: process.env.WORKER_VERSION || '2.0.0'

@@ -134,7 +134,7 @@ export class LocationDetector {
       try {
         const response = await axios.get(config.url, {
           timeout: config.timeout,
-          headers: config.headers || {},
+          headers: (config as any).headers || {},
           validateStatus: () => true
         });
         
@@ -143,9 +143,12 @@ export class LocationDetector {
           if (location) {
             logger.info(`Detected ${provider} environment`);
             return {
-              ...location,
+              continent: location.continent || 'unknown',
+              region: location.region || 'unknown',
+              country: location.country || 'unknown',
+              city: location.city || 'unknown',
               workerId: LocationDetector.getStableWorkerId()
-            };
+            } as GeographicLocation;
           }
         }
       } catch (error) {

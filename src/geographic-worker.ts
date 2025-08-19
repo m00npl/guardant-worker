@@ -1,4 +1,5 @@
-import amqp, { Channel, Connection, ConsumeMessage } from 'amqplib';
+import * as amqp from 'amqplib';
+import { Channel, Connection, ConsumeMessage } from 'amqplib';
 import axios from 'axios';
 import { createLogger } from './simple-logger';
 import {
@@ -24,7 +25,8 @@ export interface WorkerConfig {
 }
 
 export class GeographicWorker {
-  private connection: Connection | null = null;
+  private connection: amqp.Connection | null = null;
+  private channelWrapper: amqp.ChannelModel | null = null;
   private channel: Channel | null = null;
   private registration: WorkerRegistration;
   private activeChecks = new Map<string, NodeJS.Timeout>();
@@ -83,19 +85,20 @@ export class GeographicWorker {
   
   
   private async connectToRabbitMQ() {
-    this.connection = await amqp.connect(this.config.rabbitmqUrl);
+    this.channelWrapper = await amqp.connect(this.config.rabbitmqUrl);
+    this.connection = this.channelWrapper.connection;
     
-    this.connection.on('error', (err) => {
+    this.channelWrapper.on('error', (err) => {
       logger.error('RabbitMQ connection error', err);
       this.reconnect();
     });
     
-    this.connection.on('close', () => {
+    this.channelWrapper.on('close', () => {
       logger.warn('RabbitMQ connection closed');
       this.reconnect();
     });
     
-    this.channel = await this.connection.createChannel();
+    this.channel = await this.channelWrapper.createChannel();
     logger.info('✅ Connected to RabbitMQ');
   }
   
@@ -188,6 +191,7 @@ export class GeographicWorker {
     
     // Create all needed exchanges
     const exchanges = [
+      { name: 'tasks.regional', type: 'direct' },  // Add regional exchange
       { name: EXCHANGES.CHECKS, type: 'topic' },
       { name: EXCHANGES.CLAIMS, type: 'direct' },
       { name: EXCHANGES.RESULTS, type: 'topic' },
@@ -220,11 +224,29 @@ export class GeographicWorker {
     const checkQueue = `${QUEUE_PREFIXES.WORKER_CHECKS}${this.config.workerId}`;
     await this.channel.assertQueue(checkQueue, { durable: true });
     
-    // Bind to all relevant routing keys based on location
+    // Bind to regional exchange based on location
+    const continent = this.config.location.continent || 'europe';
+    await this.channel.bindQueue(checkQueue, 'tasks.regional', continent.toLowerCase());
+    logger.info(`✅ Bound to regional exchange with key: ${continent.toLowerCase()}`);
+    
+    // Also bind country and city if available
+    if (this.config.location.country) {
+      const countryKey = `country.${this.config.location.country.toLowerCase().replace(/ /g, '-')}`;
+      await this.channel.bindQueue(checkQueue, 'tasks.regional', countryKey);
+      logger.debug(`Bound to country key: ${countryKey}`);
+    }
+    
+    if (this.config.location.city) {
+      const cityKey = `city.${this.config.location.city.toLowerCase().replace(/ /g, '-')}`;
+      await this.channel.bindQueue(checkQueue, 'tasks.regional', cityKey);
+      logger.debug(`Bound to city key: ${cityKey}`);
+    }
+    
+    // Keep compatibility - bind to all relevant routing keys based on location
     const bindings = RoutingKeyBuilder.getWorkerBindings(this.config.location);
     for (const binding of bindings) {
       await this.channel.bindQueue(checkQueue, EXCHANGES.CHECKS, binding);
-      logger.debug(`Bound to routing key: ${binding}`);
+      logger.debug(`Compatibility binding: ${binding}`);
     }
     
     // Create claim response queue
@@ -430,7 +452,7 @@ export class GeographicWorker {
             const response = await fetch('https://api.ipify.org?format=json', { 
               signal: AbortSignal.timeout(5000) 
             });
-            const data = await response.json();
+            const data = await response.json() as { ip: string };
             this.cachedIP = data.ip;
             this.cachedIPTime = Date.now();
             publicIP = data.ip;
@@ -495,7 +517,7 @@ export class GeographicWorker {
     
     // Close connections
     if (this.channel) await this.channel.close();
-    if (this.connection) await this.connection.close();
+    if (this.channelWrapper) await this.channelWrapper.close();
     
     logger.info('Worker stopped');
   }

@@ -320,7 +320,7 @@ async function checkWorkerStatus(): Promise<boolean> {
       return false;
     }
     
-    const result = await response.json();
+    const result = await response.json() as any;
     logger.info('📋 Status check result:', { 
       approved: result.approved, 
       hasRabbitMQ: !!result.rabbitmqUrl,
@@ -401,7 +401,7 @@ async function registerWorker() {
       return false;
     }
 
-    const result = await response.json();
+    const result = await response.json() as any;
     logger.info('✅ Worker registered successfully', { approved: result.approved });
     
     // If already approved, update RabbitMQ URL
@@ -873,7 +873,7 @@ async function handleSingleCheck(data: any) {
         serviceId,
         nestId,
         status: 'error',
-        error: error.message,
+        error: (error as Error).message,
         timestamp: Date.now(),
         workerId: config.workerId,
       });

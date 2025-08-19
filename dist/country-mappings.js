@@ -1,9 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.CONTINENT_REGIONS = exports.CONTINENT_CODES = exports.COUNTRY_TO_CONTINENT = void 0;
-// Comprehensive country to continent mapping
 exports.COUNTRY_TO_CONTINENT = {
-    // Europe
     'albania': 'europe', 'al': 'europe',
     'andorra': 'europe', 'ad': 'europe',
     'armenia': 'europe', 'am': 'europe',
@@ -42,7 +40,7 @@ exports.COUNTRY_TO_CONTINENT = {
     'poland': 'europe', 'pl': 'europe',
     'portugal': 'europe', 'pt': 'europe',
     'romania': 'europe', 'ro': 'europe',
-    'russia': 'europe', 'ru': 'europe', // European part
+    'russia': 'europe', 'ru': 'europe',
     'san marino': 'europe', 'sm': 'europe',
     'serbia': 'europe', 'rs': 'europe',
     'slovakia': 'europe', 'sk': 'europe',
@@ -50,11 +48,10 @@ exports.COUNTRY_TO_CONTINENT = {
     'spain': 'europe', 'es': 'europe',
     'sweden': 'europe', 'se': 'europe',
     'switzerland': 'europe', 'ch': 'europe',
-    'turkey': 'europe', 'tr': 'europe', // European part
+    'turkey': 'europe', 'tr': 'europe',
     'ukraine': 'europe', 'ua': 'europe',
     'united kingdom': 'europe', 'uk': 'europe', 'gb': 'europe',
     'vatican city': 'europe', 'va': 'europe',
-    // North America
     'canada': 'northamerica', 'ca': 'northamerica',
     'united states': 'northamerica', 'usa': 'northamerica', 'us': 'northamerica',
     'mexico': 'northamerica', 'mx': 'northamerica',
@@ -72,7 +69,6 @@ exports.COUNTRY_TO_CONTINENT = {
     'dominican republic': 'northamerica', 'do': 'northamerica',
     'barbados': 'northamerica', 'bb': 'northamerica',
     'trinidad and tobago': 'northamerica', 'tt': 'northamerica',
-    // South America
     'argentina': 'southamerica', 'ar': 'southamerica',
     'bolivia': 'southamerica', 'bo': 'southamerica',
     'brazil': 'southamerica', 'br': 'southamerica',
@@ -85,7 +81,6 @@ exports.COUNTRY_TO_CONTINENT = {
     'suriname': 'southamerica', 'sr': 'southamerica',
     'uruguay': 'southamerica', 'uy': 'southamerica',
     'venezuela': 'southamerica', 've': 'southamerica',
-    // Asia
     'afghanistan': 'asia', 'af': 'asia',
     'bahrain': 'asia', 'bh': 'asia',
     'bangladesh': 'asia', 'bd': 'asia',
@@ -129,7 +124,6 @@ exports.COUNTRY_TO_CONTINENT = {
     'uzbekistan': 'asia', 'uz': 'asia',
     'vietnam': 'asia', 'vn': 'asia',
     'yemen': 'asia', 'ye': 'asia',
-    // Africa
     'algeria': 'africa', 'dz': 'africa',
     'angola': 'africa', 'ao': 'africa',
     'benin': 'africa', 'bj': 'africa',
@@ -183,7 +177,6 @@ exports.COUNTRY_TO_CONTINENT = {
     'uganda': 'africa', 'ug': 'africa',
     'zambia': 'africa', 'zm': 'africa',
     'zimbabwe': 'africa', 'zw': 'africa',
-    // Oceania
     'australia': 'oceania', 'au': 'oceania',
     'fiji': 'oceania', 'fj': 'oceania',
     'kiribati': 'oceania', 'ki': 'oceania',
@@ -199,7 +192,6 @@ exports.COUNTRY_TO_CONTINENT = {
     'tuvalu': 'oceania', 'tv': 'oceania',
     'vanuatu': 'oceania', 'vu': 'oceania'
 };
-// Continent code mappings
 exports.CONTINENT_CODES = {
     'EU': 'europe',
     'EUR': 'europe',
@@ -216,10 +208,9 @@ exports.CONTINENT_CODES = {
     'AFRICA': 'africa',
     'OC': 'oceania',
     'OCEANIA': 'oceania',
-    'AU': 'oceania', // Australia is often used as continent code
+    'AU': 'oceania',
     'AUSTRALIA': 'oceania'
 };
-// Region mappings for each continent
 exports.CONTINENT_REGIONS = {
     'europe': {
         'finland': 'north',
@@ -414,4 +405,3 @@ exports.CONTINENT_REGIONS = {
         'palau': 'micronesia'
     }
 };
-//# sourceMappingURL=country-mappings.js.map

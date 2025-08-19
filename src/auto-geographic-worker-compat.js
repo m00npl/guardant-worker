@@ -96,7 +96,7 @@ async function startAutoWorker() {
             redisUrl: redisUrl,
             rabbitmqUrl: rabbitmqUrl,
             capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
-            version: process.env.WORKER_VERSION || '6.0.8'
+            version: process.env.WORKER_VERSION || '6.4.5'
         };
         logger.info('🔧 Worker configuration:', {
             workerId: config.workerId,

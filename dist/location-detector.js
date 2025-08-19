@@ -10,49 +10,71 @@ const logger_1 = require("./logger");
 const country_mappings_1 = require("./country-mappings");
 const logger = (0, logger_1.createLogger)('location-detector');
 class LocationDetector {
+    static GEO_IP_SERVICES = [
+        'http://ip-api.com/json/',
+        'https://ipapi.co/json/',
+        'https://geolocation-db.com/json/'
+    ];
     static getStableWorkerId() {
-        // Always prefer WORKER_ID from environment
         if (process.env.WORKER_ID) {
             return process.env.WORKER_ID;
         }
-        // Generate a stable ID based on hostname
         const hostname = os_1.default.hostname();
         const hash = hostname.split('').reduce((acc, char) => {
             return ((acc << 5) - acc) + char.charCodeAt(0);
         }, 0);
         return `worker-${hostname}-${Math.abs(hash).toString(36)}`;
     }
-    /**
-     * Automatycznie wykrywa lokalizację workera
-     */
+    static CLOUD_METADATA_ENDPOINTS = {
+        aws: {
+            url: 'http://169.254.169.254/latest/meta-data/placement/availability-zone',
+            timeout: 500,
+            parser: (data) => LocationDetector.parseAwsZone(data)
+        },
+        gcp: {
+            url: 'http://metadata.google.internal/computeMetadata/v1/instance/zone',
+            headers: { 'Metadata-Flavor': 'Google' },
+            timeout: 500,
+            parser: (data) => LocationDetector.parseGcpZone(data)
+        },
+        azure: {
+            url: 'http://169.254.169.254/metadata/instance/compute/location?api-version=2021-02-01',
+            headers: { 'Metadata': 'true' },
+            timeout: 500,
+            parser: (data) => LocationDetector.parseAzureLocation(data)
+        },
+        digitalocean: {
+            url: 'http://169.254.169.254/metadata/v1/region',
+            timeout: 500,
+            parser: (data) => LocationDetector.parseDigitalOceanRegion(data)
+        },
+        hetzner: {
+            url: 'http://169.254.169.254/hetzner/v1/metadata/region',
+            timeout: 500,
+            parser: (data) => LocationDetector.parseHetznerRegion(data)
+        }
+    };
     static async detectLocation() {
         logger.info('🔍 Starting automatic location detection...');
-        // 1. Sprawdź zmienne środowiskowe (override)
         const envLocation = LocationDetector.checkEnvironmentVariables();
         if (envLocation) {
             logger.info('✅ Location from environment variables', envLocation);
             return envLocation;
         }
-        // 2. Sprawdź metadane cloud providera
         const cloudLocation = await LocationDetector.detectCloudProvider();
         if (cloudLocation) {
             logger.info('✅ Location from cloud provider metadata', cloudLocation);
             return cloudLocation;
         }
-        // 3. Użyj GeoIP jako fallback
         const geoIpLocation = await LocationDetector.detectViaGeoIP();
         if (geoIpLocation) {
             logger.info('✅ Location from GeoIP', geoIpLocation);
             return geoIpLocation;
         }
-        // 4. Ostateczny fallback
         const fallbackLocation = LocationDetector.getFallbackLocation();
         logger.warn('⚠️ Using fallback location', fallbackLocation);
         return fallbackLocation;
     }
-    /**
-     * Sprawdza zmienne środowiskowe
-     */
     static checkEnvironmentVariables() {
         if (process.env.WORKER_LOCATION) {
             const parts = process.env.WORKER_LOCATION.split('.');
@@ -77,9 +99,6 @@ class LocationDetector {
         }
         return null;
     }
-    /**
-     * Wykrywa cloud providera i pobiera metadane
-     */
     static async detectCloudProvider() {
         for (const [provider, config] of Object.entries(LocationDetector.CLOUD_METADATA_ENDPOINTS)) {
             try {
@@ -93,23 +112,21 @@ class LocationDetector {
                     if (location) {
                         logger.info(`Detected ${provider} environment`);
                         return {
-                            ...location,
+                            continent: location.continent || 'unknown',
+                            region: location.region || 'unknown',
+                            country: location.country || 'unknown',
+                            city: location.city || 'unknown',
                             workerId: LocationDetector.getStableWorkerId()
                         };
                     }
                 }
             }
             catch (error) {
-                // Ignore - not this provider
             }
         }
         return null;
     }
-    /**
-     * Wykrywa lokalizację przez GeoIP
-     */
     static async detectViaGeoIP() {
-        // Najpierw pobierz publiczne IP
         let publicIp;
         try {
             const ipResponse = await axios_1.default.get('https://api.ipify.org?format=text', { timeout: 2000 });
@@ -120,25 +137,19 @@ class LocationDetector {
             logger.error('Failed to get public IP', error);
             return null;
         }
-        // Spróbuj różnych serwisów GeoIP
         for (const serviceUrl of LocationDetector.GEO_IP_SERVICES) {
             try {
                 const response = await axios_1.default.get(serviceUrl + publicIp, { timeout: 3000 });
                 const data = response.data;
-                // Mapuj dane z różnych API
                 logger.debug('GeoIP response:', data);
-                // Fix for country codes and normalize
                 let countryData = data.country || data.country_name || data.countryCode || 'unknown';
                 const normalizedCountry = LocationDetector.normalizeString(countryData);
-                // Determine continent from country mapping first
                 let continent = country_mappings_1.COUNTRY_TO_CONTINENT[normalizedCountry] ||
                     country_mappings_1.COUNTRY_TO_CONTINENT[countryData.toLowerCase()];
-                // If not found in mapping, try from API data
                 if (!continent) {
                     const continentData = data.continent || data.continent_name || data.continentCode;
                     continent = LocationDetector.mapContinent(continentData);
                 }
-                // If still unknown, use country to determine
                 if (continent === 'unknown' && normalizedCountry !== 'unknown') {
                     continent = country_mappings_1.COUNTRY_TO_CONTINENT[normalizedCountry] || 'unknown';
                 }
@@ -159,11 +170,7 @@ class LocationDetector {
         }
         return null;
     }
-    /**
-     * Parsery dla różnych cloud providerów
-     */
     static parseAwsZone(zone) {
-        // np. "us-east-1a" -> { continent: 'northamerica', region: 'east', country: 'usa', city: 'virginia' }
         const regionMap = {
             'us-east-1': { continent: 'northamerica', region: 'east', country: 'usa', city: 'virginia' },
             'us-east-2': { continent: 'northamerica', region: 'east', country: 'usa', city: 'ohio' },
@@ -183,7 +190,6 @@ class LocationDetector {
         return regionMap[region] || {};
     }
     static parseGcpZone(zone) {
-        // np. "projects/123456/zones/us-central1-a"
         const parts = zone.split('/');
         const zoneName = parts[parts.length - 1];
         const region = zoneName.substring(0, zoneName.lastIndexOf('-'));
@@ -245,9 +251,6 @@ class LocationDetector {
         };
         return regionMap[region] || {};
     }
-    /**
-     * Pomocnicze funkcje
-     */
     static mapContinent(input) {
         if (!input)
             return 'unknown';
@@ -261,7 +264,6 @@ class LocationDetector {
             .substring(0, 20);
     }
     static determineRegion(continent, country) {
-        // Use the comprehensive mapping from country-mappings
         return country_mappings_1.CONTINENT_REGIONS[continent]?.[country] || 'general';
     }
     static getFallbackLocation() {
@@ -275,43 +277,3 @@ class LocationDetector {
     }
 }
 exports.LocationDetector = LocationDetector;
-LocationDetector.GEO_IP_SERVICES = [
-    'http://ip-api.com/json/',
-    'https://ipapi.co/json/',
-    'https://geolocation-db.com/json/'
-];
-LocationDetector.CLOUD_METADATA_ENDPOINTS = {
-    // AWS EC2
-    aws: {
-        url: 'http://169.254.169.254/latest/meta-data/placement/availability-zone',
-        timeout: 500,
-        parser: (data) => LocationDetector.parseAwsZone(data)
-    },
-    // Google Cloud
-    gcp: {
-        url: 'http://metadata.google.internal/computeMetadata/v1/instance/zone',
-        headers: { 'Metadata-Flavor': 'Google' },
-        timeout: 500,
-        parser: (data) => LocationDetector.parseGcpZone(data)
-    },
-    // Azure
-    azure: {
-        url: 'http://169.254.169.254/metadata/instance/compute/location?api-version=2021-02-01',
-        headers: { 'Metadata': 'true' },
-        timeout: 500,
-        parser: (data) => LocationDetector.parseAzureLocation(data)
-    },
-    // DigitalOcean
-    digitalocean: {
-        url: 'http://169.254.169.254/metadata/v1/region',
-        timeout: 500,
-        parser: (data) => LocationDetector.parseDigitalOceanRegion(data)
-    },
-    // Hetzner
-    hetzner: {
-        url: 'http://169.254.169.254/hetzner/v1/metadata/region',
-        timeout: 500,
-        parser: (data) => LocationDetector.parseHetznerRegion(data)
-    }
-};
-//# sourceMappingURL=location-detector.js.map

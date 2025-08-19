@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.GEOGRAPHIC_HIERARCHY = exports.QUEUE_PREFIXES = exports.EXCHANGES = exports.RoutingKeyBuilder = void 0;
-// Routing key builder
 class RoutingKeyBuilder {
     static buildKey(location, level) {
         const parts = [];
@@ -15,7 +14,6 @@ class RoutingKeyBuilder {
             parts.push(location.city);
         if (location.workerId)
             parts.push(location.workerId);
-        // Add wildcard for partial matching
         if (level && parts.length < 5) {
             parts.push('*');
         }
@@ -36,26 +34,18 @@ class RoutingKeyBuilder {
             location.workerId = parts[4];
         return location;
     }
-    // Generate all routing keys a worker should listen to
     static getWorkerBindings(location) {
         return [
-            // Specific worker
             `check.${location.continent}.${location.region}.${location.country}.${location.city}.${location.workerId}`,
-            // City level
             `check.${location.continent}.${location.region}.${location.country}.${location.city}.*`,
-            // Country level
             `check.${location.continent}.${location.region}.${location.country}.*.*`,
-            // Region level
             `check.${location.continent}.${location.region}.*.*.*`,
-            // Continent level
             `check.${location.continent}.*.*.*.*`,
-            // Global level
             `check.*.*.*.*.*`
         ];
     }
 }
 exports.RoutingKeyBuilder = RoutingKeyBuilder;
-// Exchange and queue configuration
 exports.EXCHANGES = {
     CHECKS: 'monitoring.checks',
     CLAIMS: 'monitoring.claims',
@@ -70,7 +60,6 @@ exports.QUEUE_PREFIXES = {
     SCHEDULER_REGISTRATION: 'scheduler.registration',
     SCHEDULER_RESULTS: 'scheduler.results'
 };
-// Geographic regions mapping
 exports.GEOGRAPHIC_HIERARCHY = {
     'europe': {
         name: 'Europe',
@@ -216,4 +205,3 @@ exports.GEOGRAPHIC_HIERARCHY = {
         }
     }
 };
-//# sourceMappingURL=geographic-hierarchy.js.map

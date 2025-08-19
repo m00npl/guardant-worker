@@ -55,7 +55,6 @@ async function loadCredentials() {
 async function startAutoWorker() {
     logger.info('🚀 Starting GuardAnt Geographic Worker (Compatible Mode)...');
     try {
-        // Check if we have WORKER_TOKEN from Worker Ant Program
         const workerToken = process.env.WORKER_TOKEN;
         const workerId = process.env.WORKER_ID;
         if (!workerToken || !workerId) {
@@ -64,9 +63,7 @@ async function startAutoWorker() {
             logger.error('Please apply at: https://guardant.me/admin/worker-program');
             process.exit(1);
         }
-        // Automatycznie wykryj lokalizację
         const location = await location_detector_1.LocationDetector.detectLocation();
-        // Use provided workerId instead of generated one
         location.workerId = workerId;
         logger.info('📍 Detected location:', {
             continent: location.continent,
@@ -75,13 +72,11 @@ async function startAutoWorker() {
             city: location.city,
             workerId: location.workerId
         });
-        // Pokaż ładnie sformatowaną lokalizację
         const locationString = `${location.continent}.${location.region}.${location.country}.${location.city}`;
         console.log(`\n╔═══════════════════════════════════════════════════════╗`);
         console.log(`║ 🌍 Worker Location: ${locationString.padEnd(33)} ║`);
         console.log(`║ 🆔 Worker ID: ${workerId.padEnd(39)} ║`);
         console.log(`╚═══════════════════════════════════════════════════════╝\n`);
-        // Use provided RABBITMQ_URL and REDIS_URL from Worker Ant Program
         const rabbitmqUrl = process.env.RABBITMQ_URL;
         const redisUrl = process.env.REDIS_URL || 'redis://db.guardant.me:16379';
         if (!rabbitmqUrl) {
@@ -89,24 +84,20 @@ async function startAutoWorker() {
             logger.error('Worker needs RabbitMQ credentials from Worker Ant Program.');
             process.exit(1);
         }
-        // Konfiguracja workera
         const config = {
             workerId: workerId,
             location: location,
-            redisUrl: redisUrl,
             rabbitmqUrl: rabbitmqUrl,
             capabilities: (process.env.WORKER_CAPABILITIES || 'http,https,tcp,ping').split(','),
-            version: process.env.WORKER_VERSION || '6.0.8'
+            version: process.env.WORKER_VERSION || '6.4.5'
         };
         logger.info('🔧 Worker configuration:', {
             workerId: config.workerId,
             location: `${location.continent}.${location.region}.${location.country}.${location.city}`,
-            redisUrl: config.redisUrl.replace(/:[^:@]+@/, ':****@'),
             rabbitmqUrl: config.rabbitmqUrl.replace(/:[^:@]+@/, ':****@'),
             capabilities: config.capabilities,
             version: config.version
         });
-        // Register with API to report location
         try {
             const response = await fetch(`${API_ENDPOINT}/api/worker/register`, {
                 method: 'POST',
@@ -138,11 +129,9 @@ async function startAutoWorker() {
         catch (error) {
             logger.warn('⚠️ Could not connect to API to register location:', error);
         }
-        // Uruchom workera
         const worker = new geographic_worker_1.GeographicWorker(config);
         await worker.start();
         logger.info('✅ Worker started successfully');
-        // Obsługa zamknięcia
         process.on('SIGINT', async () => {
             logger.info('🛑 Shutting down gracefully...');
             await worker.stop();
@@ -159,9 +148,7 @@ async function startAutoWorker() {
         process.exit(1);
     }
 }
-// Start worker
 startAutoWorker().catch((error) => {
     console.error('Fatal error:', error);
     process.exit(1);
 });
-//# sourceMappingURL=auto-geographic-worker-compat.js.map
