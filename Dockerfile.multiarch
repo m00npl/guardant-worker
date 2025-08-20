@@ -16,8 +16,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install production dependencies only
-RUN bun install --production
+# Install dependencies  
+RUN bun install
 
 # Copy source and dist files
 COPY src/ ./src/
