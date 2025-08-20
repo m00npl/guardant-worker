@@ -442,7 +442,22 @@ export class GeographicWorker {
   
   private startHeartbeat() {
     this.heartbeatInterval = setInterval(async () => {
-      if (!this.channel) return;
+      // If channel is closed, try to recreate it
+      if (!this.channel || this.channel.closed) {
+        try {
+          logger.warn('Channel not available for heartbeat, attempting to recreate...');
+          if (this.channelWrapper && this.channelWrapper.connection) {
+            this.channel = await this.channelWrapper.createChannel();
+            logger.info('Channel recreated for heartbeat');
+          } else {
+            logger.error('Cannot recreate channel - no connection available');
+            return;
+          }
+        } catch (error) {
+          logger.error('Failed to recreate channel for heartbeat:', error);
+          return;
+        }
+      }
       
       try {
         // Try to get public IP (cached for efficiency)
@@ -491,7 +506,10 @@ export class GeographicWorker {
           Buffer.from(JSON.stringify(heartbeatData))
         );
         
-        logger.debug('💓 Heartbeat sent');
+        logger.info('💓 Heartbeat sent', {
+          workerId: this.config.workerId,
+          timestamp: heartbeatData.timestamp
+        });
       } catch (error) {
         logger.error('Failed to send heartbeat', error);
       }
