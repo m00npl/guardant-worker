@@ -8,7 +8,7 @@ set -e
 # Configuration
 DOCKER_REPO="moonplkr/guardant-worker"
 VERSION="${1:-v67}"  # Accept version as first argument, default to v67
-PLATFORMS="linux/amd64,linux/arm64,linux/arm/v7"
+PLATFORMS="linux/amd64,linux/arm64"  # Removed arm/v7 due to build issues
 
 echo "🚀 Building multi-architecture GuardAnt Worker image v${VERSION}"
 
