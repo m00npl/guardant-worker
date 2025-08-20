@@ -438,6 +438,14 @@ export class GeographicWorker {
       status: result.status,
       responseTime: result.responseTime
     });
+    
+    // Increment counters
+    this.checksCompleted++;
+    // Basic points calculation: 1 point per check, 2 if successful
+    const points = result.status === 'up' ? 2 : 1;
+    this.totalPoints += points;
+    
+    logger.debug(`📊 Stats updated: checks=${this.checksCompleted}, points=${this.totalPoints}`);
   }
   
   private startHeartbeat() {
@@ -490,8 +498,8 @@ export class GeographicWorker {
           // Required fields for HeartbeatVerifier
           region: this.config.location.region || 'unknown',
           version: this.config.version || '6.4.4',
-          checksCompleted: 0, // TODO: track actual checks completed
-          totalPoints: 0, // TODO: track actual points
+          checksCompleted: this.checksCompleted,
+          totalPoints: this.totalPoints
           currentPeriodPoints: 0,
           earnings: {
             points: 0,
@@ -508,7 +516,10 @@ export class GeographicWorker {
         
         logger.info('💓 Heartbeat sent', {
           workerId: this.config.workerId,
-          timestamp: heartbeatData.timestamp
+          timestamp: heartbeatData.timestamp,
+          uptime: heartbeatData.uptime,
+          uptimeMinutes: Math.floor(heartbeatData.uptime / 60000),
+          registeredAt: this.registration.registeredAt
         });
       } catch (error) {
         logger.error('Failed to send heartbeat', error);
