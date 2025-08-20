@@ -23,6 +23,9 @@ COPY dist/ ./dist/
 # Clean up
 RUN npm cache clean --force
 
+# Set version as build argument
+ARG WORKER_VERSION=v67
+
 # Create non-root user
 RUN addgroup -g 1001 -S worker && \
     adduser -u 1001 -S worker -G worker && \
@@ -35,6 +38,7 @@ USER worker
 ENV NODE_ENV=production \
     API_ENDPOINT="https://guardant.me" \
     WORKER_REGION="auto" \
+    WORKER_VERSION=${WORKER_VERSION} \
     MAX_CONCURRENT="10" \
     LOG_LEVEL="info"
 

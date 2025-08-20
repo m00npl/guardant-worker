@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 DOCKER_REPO="moonplkr/guardant-worker"
-VERSION="6.4.0"
+VERSION="${1:-v67}"  # Accept version as first argument, default to v67
 PLATFORMS="linux/amd64,linux/arm64,linux/arm/v7"
 
 echo "🚀 Building multi-architecture GuardAnt Worker image v${VERSION}"
@@ -33,6 +33,7 @@ fi
 echo "🔨 Building for platforms: ${PLATFORMS}"
 docker buildx build \
     --platform ${PLATFORMS} \
+    --build-arg WORKER_VERSION=${VERSION} \
     --tag ${DOCKER_REPO}:${VERSION} \
     --tag ${DOCKER_REPO}:latest \
     --file Dockerfile.multiarch \
