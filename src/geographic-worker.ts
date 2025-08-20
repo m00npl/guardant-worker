@@ -499,7 +499,7 @@ export class GeographicWorker {
           region: this.config.location.region || 'unknown',
           version: this.config.version || '6.4.4',
           checksCompleted: this.checksCompleted,
-          totalPoints: this.totalPoints
+          totalPoints: this.totalPoints,
           currentPeriodPoints: 0,
           earnings: {
             points: 0,
