@@ -32,6 +32,9 @@ RUN bun build ./src/auto-geographic-worker.ts --target bun --outfile ./dist/auto
 # Clean up dev dependencies (bun doesn't need prune)
 RUN rm -rf node_modules/.cache
 
+# Set version as build argument
+ARG WORKER_VERSION=v67
+
 # Create non-root user
 RUN addgroup -g 1001 -S worker && \
     adduser -u 1001 -S worker -G worker && \
@@ -44,7 +47,7 @@ USER worker
 ENV NODE_ENV=production \
     API_ENDPOINT="https://guardant.me" \
     WORKER_REGION="auto" \
-    WORKER_VERSION="6.4.5" \
+    WORKER_VERSION=${WORKER_VERSION} \
     MAX_CONCURRENT="10" \
     LOG_LEVEL="info"
 
