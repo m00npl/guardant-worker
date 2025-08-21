@@ -292,6 +292,10 @@ export class GeographicWorker {
     
     const checkQueue = `${QUEUE_PREFIXES.WORKER_CHECKS}${this.config.workerId}`;
     
+    // Set prefetch to 1 to prevent one worker from taking all tasks
+    await this.channel.prefetch(1);
+    logger.info('📊 Set prefetch limit to 1 for fair task distribution');
+    
     await this.channel.consume(checkQueue, async (msg) => {
       if (!msg) return;
       
@@ -445,7 +449,7 @@ export class GeographicWorker {
     const points = result.status === 'up' ? 2 : 1;
     this.totalPoints += points;
     
-    logger.debug(`📊 Stats updated: checks=${this.checksCompleted}, points=${this.totalPoints}`);
+    logger.info(`📊 Stats updated: checks=${this.checksCompleted}, points=${this.totalPoints}`);
   }
   
   private startHeartbeat() {
